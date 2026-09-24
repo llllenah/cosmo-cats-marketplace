@@ -1,3 +1,11 @@
 spring:
   application:
     name: cosmo-cats-marketplace
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    url: /api-specs/cosmo-cats-product-api.yml
