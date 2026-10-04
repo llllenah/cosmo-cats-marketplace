@@ -1,100 +1,383 @@
 openapi: 3.0.3
 info:
-  title: Cosmo Cats Product API
+  title: Cosmo Cats Intergalactic Marketplace — Product API
+  description: |
+    CRUD API for products of the Cosmo Cats marketplace.
+    All errors follow RFC 9457 (Problem Details for HTTP APIs) and are returned
+    with the `application/problem+json` media type.
   version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local environment
+tags:
+  - name: Products
+    description: Operations with marketplace products
 
 paths:
-  /products/getAll:
+  /api/v1/products:
     get:
-      summary: Get all products
+      tags: [Products]
+      operationId: getProducts
+      summary: Get a page of products
+      description: |
+        Products are sorted by name, then by id. Pagination is token based (keyset):
+        request the first page without pageToken, then pass nextPageToken from the
+        response to get the following page. The token is opaque, clients must not parse it.
+        Unlike offset pagination, inserts and deletes between requests do not shift pages.
+        An empty catalog returns 200 with empty content.
       parameters:
-        - name: page
+        - name: pageSize
           in: query
+          description: Number of products per page.
+          required: false
           schema:
             type: integer
-        - name: size
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: pageToken
           in: query
+          description: Token from nextPageToken of the previous response. Omit it for the first page.
+          required: false
           schema:
-            type: integer
+            type: string
+            maxLength: 512
       responses:
         '200':
-          description: OK
+          description: Page of products
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Product'
-
-  /products/get/{id}:
-    get:
-      summary: Get product
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: OK
+                $ref: '#/components/schemas/ProductPage'
+        '400':
+          description: Invalid pageSize or pageToken
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/Product'
-
-  /products/create:
+                $ref: '#/components/schemas/ValidationProblemDetail'
+              examples:
+                invalidPageSize:
+                  summary: pageSize out of range
+                  value:
+                    type: https://cosmo-cats.market/errors/validation
+                    title: Validation failed
+                    status: 400
+                    detail: Field 'pageSize' must be less than or equal to 100.
+                    instance: /api/v1/products
+                    errors:
+                      - field: pageSize
+                        message: must be less than or equal to 100
+                invalidPageToken:
+                  summary: pageToken cannot be decoded
+                  value:
+                    type: https://cosmo-cats.market/errors/invalid-page-token
+                    title: Invalid page token
+                    status: 400
+                    detail: Page token is invalid. Request the first page without pageToken.
+                    instance: /api/v1/products
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
-      summary: Create product
+      tags: [Products]
+      operationId: createProduct
+      summary: Create a product
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Product'
+              $ref: '#/components/schemas/ProductRequest'
+      responses:
+        '201':
+          description: Product created
+          headers:
+            Location:
+              description: URL of the created product
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Product id
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Products]
+      operationId: getProductById
+      summary: Get a product by id
       responses:
         '200':
-          description: OK
-
-  /products/update:
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     put:
-      summary: Update product
+      tags: [Products]
+      operationId: updateProduct
+      summary: Fully update a product
+      description: Replaces all editable fields of the product. The id cannot be changed.
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Product'
+              $ref: '#/components/schemas/ProductRequest'
       responses:
         '200':
-          description: OK
-
-  /products/delete/{id}:
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
-      summary: Delete product
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+      tags: [Products]
+      operationId: deleteProduct
+      summary: Delete a product
       responses:
-        '200':
-          description: OK
+        '204':
+          description: Product deleted
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
 components:
   schemas:
-    Product:
+    ProductRequest:
       type: object
+      required: [name, price, stockQuantity, categoryId]
       properties:
-        id:
-          type: integer
         name:
           type: string
+          minLength: 3
+          maxLength: 100
+          description: |
+            Product name. Must contain at least one cosmic word:
+            star, galaxy, comet, cosmic, space, planet, moon, nebula, orbit or asteroid.
+          example: Anti-gravity star yarn ball
         description:
           type: string
+          maxLength: 500
+          nullable: true
+          example: Floats in zero gravity and never gets lost under the sofa.
         price:
           type: number
-          format: double
-        quantity:
+          description: Price in USD. Greater than 0, at most 2 decimal places.
+          exclusiveMinimum: true
+          minimum: 0
+          multipleOf: 0.01
+          example: 12.50
+        stockQuantity:
           type: integer
-        category:
+          format: int32
+          minimum: 0
+          example: 120
+        categoryId:
           type: string
+          format: uuid
+          description: Id of an existing category.
+          example: 11111111-1111-1111-1111-111111111111
+
+    ProductResponse:
+      type: object
+      required: [id, name, price, stockQuantity, categoryId]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: aaaaaaaa-0000-0000-0000-000000000001
+        name:
+          type: string
+          example: Anti-gravity star yarn ball
+        description:
+          type: string
+          nullable: true
+          example: Floats in zero gravity and never gets lost under the sofa.
+        price:
+          type: number
+          example: 12.50
+        stockQuantity:
+          type: integer
+          format: int32
+          example: 120
+        categoryId:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+
+    ProductPage:
+      type: object
+      required: [content, page]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductResponse'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    PageInfo:
+      type: object
+      required: [size, totalElements]
+      properties:
+        size:
+          type: integer
+          format: int32
+          description: Requested page size.
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          example: 4
+        nextPageToken:
+          type: string
+          nullable: true
+          description: Token for the next page. Null on the last page.
+          example: YWFhYWFhYWEtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAzOkNvbWV0IHRhaWwgc2NyYXRjaGluZyBwb3N0
+
+    ProblemDetail:
+      type: object
+      description: RFC 9457 problem details object.
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://cosmo-cats.market/errors/validation
+        title:
+          type: string
+          example: Validation failed
+        status:
+          type: integer
+          format: int32
+          example: 400
+        detail:
+          type: string
+          example: Field 'price' must be greater than 0.
+        instance:
+          type: string
+          format: uri-reference
+          example: /api/v1/products
+
+    ValidationProblemDetail:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetail'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldValidationError'
+
+    FieldValidationError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: price
+        message:
+          type: string
+          example: must be greater than 0
+
+  responses:
+    ValidationError:
+      description: Request is invalid (body, path or query parameters)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/validation
+            title: Validation failed
+            status: 400
+            detail: Field 'price' must be greater than 0.
+            instance: /api/v1/products
+            errors:
+              - field: price
+                message: must be greater than 0
+    NotFound:
+      description: Product does not exist
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/product-not-found
+            title: Product not found
+            status: 404
+            detail: Product with id 'aaaaaaaa-0000-0000-0000-000000000099' was not found.
+            instance: /api/v1/products/aaaaaaaa-0000-0000-0000-000000000099
+    Conflict:
+      description: Product with the same name already exists
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/product-already-exists
+            title: Product already exists
+            status: 409
+            detail: Product with name 'Galaxy cosmic milk' already exists.
+            instance: /api/v1/products
+    UnprocessableEntity:
+      description: Referenced category does not exist
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/category-not-found
+            title: Category not found
+            status: 422
+            detail: Category with id '99999999-9999-9999-9999-999999999999' does not exist.
+            instance: /api/v1/products
+    InternalError:
+      description: Unexpected server error. Internal details are never exposed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/internal-error
+            title: Internal server error
+            status: 500
+            detail: Something went wrong on our side. Please try again later.
+            instance: /api/v1/products
