@@ -1,13 +1,15 @@
 package com.cosmocats.marketplace.web.product;
 
+import com.cosmocats.marketplace.application.product.PageCursor;
 import com.cosmocats.marketplace.application.product.ProductService;
 import com.cosmocats.marketplace.domain.product.Product;
+import com.cosmocats.marketplace.web.common.PageQuery;
 import com.cosmocats.marketplace.web.common.PageResponse;
+import com.cosmocats.marketplace.web.common.PageTokenCodec;
 import com.cosmocats.marketplace.web.product.dto.ProductRequestDto;
 import com.cosmocats.marketplace.web.product.dto.ProductResponseDto;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +18,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -25,19 +26,12 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/products")
+@RequiredArgsConstructor
 public class ProductController {
-
-    private static final String DEFAULT_PAGE = "0";
-    private static final String DEFAULT_PAGE_SIZE = "20";
-    private static final int MAX_PAGE_SIZE = 100;
 
     private final ProductService productService;
     private final ProductMapper productMapper;
-
-    public ProductController(ProductService productService, ProductMapper productMapper) {
-        this.productService = productService;
-        this.productMapper = productMapper;
-    }
+    private final PageTokenCodec pageTokenCodec;
 
     @PostMapping
     public ResponseEntity<ProductResponseDto> createProduct(@Valid @RequestBody ProductRequestDto request) {
@@ -50,13 +44,9 @@ public class ProductController {
     }
 
     @GetMapping
-    public PageResponse<ProductResponseDto> getProducts(
-            @RequestParam(defaultValue = DEFAULT_PAGE)
-            @Min(value = 0, message = "must be greater than or equal to 0") int page,
-            @RequestParam(defaultValue = DEFAULT_PAGE_SIZE)
-            @Min(value = 1, message = "must be greater than or equal to 1")
-            @Max(value = MAX_PAGE_SIZE, message = "must be less than or equal to 100") int size) {
-        return productMapper.toPageResponse(productService.getProducts(page, size));
+    public PageResponse<ProductResponseDto> getProducts(@Valid PageQuery pageQuery) {
+        PageCursor cursor = pageTokenCodec.decode(pageQuery.pageToken());
+        return productMapper.toPageResponse(productService.getProducts(cursor, pageQuery.pageSize()));
     }
 
     @GetMapping("/{id}")
@@ -66,7 +56,7 @@ public class ProductController {
 
     @PutMapping("/{id}")
     public ProductResponseDto updateProduct(@PathVariable UUID id, @Valid @RequestBody ProductRequestDto request) {
-        Product updatedProduct = productService.updateProduct(id, productMapper.toDomain(request));
+        Product updatedProduct = productService.updateProduct(productMapper.toDomain(id, request));
         return productMapper.toDto(updatedProduct);
     }
 

@@ -7,7 +7,8 @@ import java.util.UUID;
 /**
  * Product offered on the marketplace.
  * The category is referenced by id because Category is a separate aggregate.
- * The id is null until the product is stored.
+ * Input rules are checked before construction (ProductMapper and ProductValidationService),
+ * the constructor only guards against missing required values.
  */
 public record Product(
         UUID id,
@@ -22,15 +23,6 @@ public record Product(
         Objects.requireNonNull(name, "name must not be null");
         Objects.requireNonNull(price, "price must not be null");
         Objects.requireNonNull(categoryId, "categoryId must not be null");
-        if (name.isBlank()) {
-            throw new IllegalArgumentException("name must not be blank");
-        }
-        if (price.signum() <= 0) {
-            throw new IllegalArgumentException("price must be greater than 0");
-        }
-        if (stockQuantity < 0) {
-            throw new IllegalArgumentException("stockQuantity must not be negative");
-        }
     }
 
     public Product withId(UUID newId) {

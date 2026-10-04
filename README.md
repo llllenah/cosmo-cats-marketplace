@@ -23,24 +23,25 @@ gradlew.bat bootRun        # Windows cmd / PowerShell
 
 ## Архітектура
 
-Шари за принципом Onion. Залежності спрямовані всередину: `web` → `application` → `domain`. Домен не знає про Spring.
+Шари за принципом Onion: `web` → `application` → `domain`. Домен не знає про Spring. Інтерфейси репозиторіїв лежать разом з реалізаціями в `infrastructure/persistence`.
 
 ```
 com.cosmocats.marketplace
-├── domain            доменна модель і порти репозиторіїв
-│   ├── product       Product, ProductRepository
-│   ├── category      Category, CategoryRepository
+├── domain            доменна модель
+│   ├── product       Product
+│   ├── category      Category
 │   ├── cart          Cart, CartItem
 │   └── order         Order, OrderItem, OrderStatus
-├── application       бізнес-логіка (ProductService) і доменні винятки
-├── infrastructure    in-memory репозиторії з mock-даними
-└── web               REST-контролер, DTO, ProductMapper, валідація, обробка помилок
+├── application       ProductService, ProductValidationService, курсор пагінації, доменні винятки
+├── infrastructure    інтерфейси репозиторіїв і in-memory реалізації з mock-даними
+└── web               REST-контролер, DTO, ProductMapper, пагінація, валідація, обробка помилок
 ```
 
 Рішення:
 
 - Гроші зберігаються як `BigDecimal`, щоб уникнути помилок округлення.
-- Доменні об'єкти незмінні (Java records), інваріанти перевіряються в конструкторі.
+- DTO і доменні об'єкти зроблені як Java records.
+- Валідація в три кроки: Bean Validation на DTO, базові правила в `ProductMapper` під час маппінгу, перевірки з даними (існування категорії, унікальність назви) в `ProductValidationService`.
 - `Product` посилається на категорію через `categoryId`, бо `Category` є окремим агрегатом.
 - Маппінг DTO ↔ домен ручний, клас `ProductMapper` (`toDto` / `toDomain`).
 - Id генерує сервер. Клієнт не може передати або змінити його через тіло запиту.
@@ -49,7 +50,7 @@ com.cosmocats.marketplace
 
 | Метод | URL | Опис | Успіх |
 |---|---|---|---|
-| GET | `/api/v1/products?page=0&size=20` | Сторінка продуктів | 200 |
+| GET | `/api/v1/products?pageSize=20&pageToken=...` | Сторінка продуктів | 200 |
 | GET | `/api/v1/products/{id}` | Продукт за id | 200 |
 | POST | `/api/v1/products` | Створити продукт | 201 + `Location` |
 | PUT | `/api/v1/products/{id}` | Повністю оновити продукт | 200 |
@@ -67,7 +68,7 @@ com.cosmocats.marketplace
 | `stockQuantity` | обов'язкове, не менше 0 |
 | `categoryId` | обов'язкове, UUID існуючої категорії |
 
-Параметри пагінації: `page >= 0`, `1 <= size <= 100`.
+Параметри пагінації: `1 <= pageSize <= 100` (за замовчуванням 20), `pageToken` з `nextPageToken` попередньої відповіді. Перша сторінка запитується без `pageToken`.
 
 ## Приклади
 
@@ -112,21 +113,29 @@ curl -i -X POST http://localhost:8080/api/v1/products \
 Сторінка продуктів:
 
 ```bash
-curl "http://localhost:8080/api/v1/products?page=0&size=2"
+curl "http://localhost:8080/api/v1/products?pageSize=2"
 ```
 
 ```json
 {
-  "content": [ { "id": "...", "name": "Anti-gravity star yarn ball", "...": "..." } ],
-  "page": 0,
-  "size": 2,
-  "totalElements": 4,
-  "totalPages": 2
+  "content": [ { "id": "...", "name": "Anti-gravity star yarn ball", "...": "..." }, { "...": "..." } ],
+  "page": {
+    "size": 2,
+    "totalElements": 4,
+    "nextPageToken": "YWFhYWFhYWEtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAzOkNvbWV0IHRhaWwgc2NyYXRjaGluZyBwb3N0"
+  }
 }
 ```
+
+Наступна сторінка:
+
+```bash
+curl "http://localhost:8080/api/v1/products?pageSize=2&pageToken=YWFhYWFhYWEtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAzOkNvbWV0IHRhaWwgc2NyYXRjaGluZyBwb3N0"
+```
+
+Пагінація keyset: токен кодує назву й id останнього продукту на сторінці, наступна сторінка починається одразу після нього. Тому вставки й видалення між запитами не зсувають сторінки. На останній сторінці `nextPageToken` дорівнює `null`.
 
 ## Обмеження
 
 - Дані зберігаються в пам'яті й скидаються після перезапуску. База даних буде в Lab 3.
-- Пагінація offset-based над mock-даними. Коректність пагінації при змінах даних розглядається на тижні з БД.
 - Перевірка унікальності назви не атомарна. У Lab 3 її замінить unique constraint у БД.

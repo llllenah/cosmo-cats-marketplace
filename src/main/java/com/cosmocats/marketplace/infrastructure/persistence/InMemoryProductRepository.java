@@ -1,10 +1,9 @@
 package com.cosmocats.marketplace.infrastructure.persistence;
 
+import com.cosmocats.marketplace.application.product.PageCursor;
 import com.cosmocats.marketplace.domain.product.Product;
-import com.cosmocats.marketplace.domain.product.ProductRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -13,10 +12,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
 public class InMemoryProductRepository implements ProductRepository {
-
-    private static final Comparator<Product> BY_NAME_THEN_ID = Comparator
-            .comparing(Product::name, String.CASE_INSENSITIVE_ORDER)
-            .thenComparing(Product::id);
 
     private final Map<UUID, Product> products = new ConcurrentHashMap<>();
 
@@ -36,11 +31,18 @@ public class InMemoryProductRepository implements ProductRepository {
     }
 
     @Override
-    public List<Product> findPage(int page, int size) {
+    public Optional<Product> findByNameIgnoreCase(String name) {
         return products.values().stream()
-                .sorted(BY_NAME_THEN_ID)
-                .skip((long) page * size)
-                .limit(size)
+                .filter(product -> product.name().equalsIgnoreCase(name))
+                .findFirst();
+    }
+
+    @Override
+    public List<Product> findPageAfter(PageCursor cursor, int limit) {
+        return products.values().stream()
+                .filter(product -> cursor == null || cursor.isBefore(product))
+                .sorted(PageCursor.PRODUCT_ORDER)
+                .limit(limit)
                 .toList();
     }
 
@@ -52,12 +54,6 @@ public class InMemoryProductRepository implements ProductRepository {
     @Override
     public boolean existsById(UUID id) {
         return products.containsKey(id);
-    }
-
-    @Override
-    public boolean existsByNameIgnoreCase(String name) {
-        return products.values().stream()
-                .anyMatch(product -> product.name().equalsIgnoreCase(name));
     }
 
     @Override

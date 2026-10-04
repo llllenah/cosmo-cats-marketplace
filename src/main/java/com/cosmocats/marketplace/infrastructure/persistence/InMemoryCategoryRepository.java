@@ -1,7 +1,6 @@
 package com.cosmocats.marketplace.infrastructure.persistence;
 
 import com.cosmocats.marketplace.domain.category.Category;
-import com.cosmocats.marketplace.domain.category.CategoryRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;

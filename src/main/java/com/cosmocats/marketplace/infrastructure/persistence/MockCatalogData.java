@@ -2,6 +2,7 @@ package com.cosmocats.marketplace.infrastructure.persistence;
 
 import com.cosmocats.marketplace.domain.category.Category;
 import com.cosmocats.marketplace.domain.product.Product;
+import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -11,14 +12,12 @@ import java.util.UUID;
  * Mock data used until the database integration is added (Lab 3).
  * Ids are fixed so that the examples in README can be reused.
  */
-final class MockCatalogData {
+@UtilityClass
+class MockCatalogData {
 
     static final UUID ANTI_GRAVITY_TOYS_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     static final UUID COSMIC_FOOD_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     static final UUID SPACE_GEAR_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
-
-    private MockCatalogData() {
-    }
 
     static List<Category> categories() {
         return List.of(

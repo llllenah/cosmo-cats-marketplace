@@ -10,9 +10,9 @@ public interface ProductService {
 
     Product getProductById(UUID id);
 
-    PagedResult<Product> getProducts(int page, int size);
+    PagedResult<Product> getProducts(PageCursor cursor, int size);
 
-    Product updateProduct(UUID id, Product product);
+    Product updateProduct(Product product);
 
     void deleteProduct(UUID id);
 }

@@ -1,4 +1,6 @@
-package com.cosmocats.marketplace.domain.category;
+package com.cosmocats.marketplace.infrastructure.persistence;
+
+import com.cosmocats.marketplace.domain.category.Category;
 
 import java.util.List;
 import java.util.Optional;

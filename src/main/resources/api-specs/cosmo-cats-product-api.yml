@@ -19,18 +19,14 @@ paths:
       tags: [Products]
       operationId: getProducts
       summary: Get a page of products
-      description: Products are sorted by name. Pagination is offset based.
+      description: |
+        Products are sorted by name, then by id. Pagination is token based (keyset):
+        request the first page without pageToken, then pass nextPageToken from the
+        response to get the following page. The token is opaque, clients must not parse it.
+        Unlike offset pagination, inserts and deletes between requests do not shift pages.
+        An empty catalog returns 200 with empty content.
       parameters:
-        - name: page
-          in: query
-          description: Zero-based page index.
-          required: false
-          schema:
-            type: integer
-            format: int32
-            minimum: 0
-            default: 0
-        - name: size
+        - name: pageSize
           in: query
           description: Number of products per page.
           required: false
@@ -40,6 +36,13 @@ paths:
             minimum: 1
             maximum: 100
             default: 20
+        - name: pageToken
+          in: query
+          description: Token from nextPageToken of the previous response. Omit it for the first page.
+          required: false
+          schema:
+            type: string
+            maxLength: 512
       responses:
         '200':
           description: Page of products
@@ -48,7 +51,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProductPage'
         '400':
-          $ref: '#/components/responses/ValidationError'
+          description: Invalid pageSize or pageToken
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetail'
+              examples:
+                invalidPageSize:
+                  summary: pageSize out of range
+                  value:
+                    type: https://cosmo-cats.market/errors/validation
+                    title: Validation failed
+                    status: 400
+                    detail: Field 'pageSize' must be less than or equal to 100.
+                    instance: /api/v1/products
+                    errors:
+                      - field: pageSize
+                        message: must be less than or equal to 100
+                invalidPageToken:
+                  summary: pageToken cannot be decoded
+                  value:
+                    type: https://cosmo-cats.market/errors/invalid-page-token
+                    title: Invalid page token
+                    status: 400
+                    detail: Page token is invalid. Request the first page without pageToken.
+                    instance: /api/v1/products
         '500':
           $ref: '#/components/responses/InternalError'
     post:
@@ -217,28 +244,33 @@ components:
 
     ProductPage:
       type: object
-      required: [content, page, size, totalElements, totalPages]
+      required: [content, page]
       properties:
         content:
           type: array
           items:
             $ref: '#/components/schemas/ProductResponse'
         page:
-          type: integer
-          format: int32
-          example: 0
+          $ref: '#/components/schemas/PageInfo'
+
+    PageInfo:
+      type: object
+      required: [size, totalElements]
+      properties:
         size:
           type: integer
           format: int32
+          description: Requested page size.
           example: 20
         totalElements:
           type: integer
           format: int64
           example: 4
-        totalPages:
-          type: integer
-          format: int32
-          example: 1
+        nextPageToken:
+          type: string
+          nullable: true
+          description: Token for the next page. Null on the last page.
+          example: YWFhYWFhYWEtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAzOkNvbWV0IHRhaWwgc2NyYXRjaGluZyBwb3N0
 
     ProblemDetail:
       type: object

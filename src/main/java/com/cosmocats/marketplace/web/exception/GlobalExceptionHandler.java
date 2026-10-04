@@ -3,16 +3,17 @@ package com.cosmocats.marketplace.web.exception;
 import com.cosmocats.marketplace.application.exception.CategoryNotFoundException;
 import com.cosmocats.marketplace.application.exception.ProductNameAlreadyExistsException;
 import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
+import com.cosmocats.marketplace.application.exception.ProductValidationException;
+import com.cosmocats.marketplace.web.common.InvalidPageTokenException;
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.TypeMismatchException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,12 +29,13 @@ import java.util.stream.Collectors;
 
 /**
  * Converts exceptions into RFC 9457 problem details.
- * Standard Spring MVC errors (405, 415, unknown path, etc.) are handled by the parent class.
+ * Standard Spring MVC errors (405, 415, unknown path, wrong parameter type, etc.)
+ * are handled by the parent class.
  */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String ERROR_TYPE_BASE_URL = "https://cosmo-cats.market/errors/";
 
     @Override
@@ -42,10 +44,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                                   HttpStatusCode status,
                                                                   WebRequest request) {
         List<FieldValidationError> errors = ex.getBindingResult().getFieldErrors().stream()
-                .map(error -> new FieldValidationError(error.getField(), error.getDefaultMessage()))
+                .map(error -> new FieldValidationError(error.getField(), fieldErrorMessage(error)))
                 .sorted(Comparator.comparing(FieldValidationError::field))
                 .toList();
-        return validationProblem(errors, request);
+        return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
     }
 
     @Override
@@ -60,7 +62,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                 error.getDefaultMessage())))
                 .sorted(Comparator.comparing(FieldValidationError::field))
                 .toList();
-        return validationProblem(errors, request);
+        return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
     }
 
     @Override
@@ -73,15 +75,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(problem);
     }
 
-    @Override
-    protected ResponseEntity<Object> handleTypeMismatch(TypeMismatchException ex,
-                                                        HttpHeaders headers,
-                                                        HttpStatusCode status,
-                                                        WebRequest request) {
-        String detail = "Parameter '%s' has invalid value '%s'.".formatted(ex.getPropertyName(), ex.getValue());
-        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "invalid-parameter", "Invalid parameter",
-                detail, requestUri(request));
-        return ResponseEntity.badRequest().body(problem);
+    @ExceptionHandler(ProductValidationException.class)
+    public ProblemDetail handleProductValidation(ProductValidationException ex, HttpServletRequest request) {
+        List<FieldValidationError> errors = ex.getViolations().stream()
+                .map(violation -> new FieldValidationError(violation.field(), violation.message()))
+                .sorted(Comparator.comparing(FieldValidationError::field))
+                .toList();
+        return validationProblem(errors, request.getRequestURI());
+    }
+
+    @ExceptionHandler(InvalidPageTokenException.class)
+    public ProblemDetail handleInvalidPageToken(InvalidPageTokenException ex, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST, "invalid-page-token", "Invalid page token",
+                ex.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(ProductNotFoundException.class)
@@ -109,14 +115,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "Something went wrong on our side. Please try again later.", request.getRequestURI());
     }
 
-    private ResponseEntity<Object> validationProblem(List<FieldValidationError> errors, WebRequest request) {
+    private static String fieldErrorMessage(FieldError error) {
+        // Binding failure means the value could not be converted, e.g. pageSize=abc.
+        return error.isBindingFailure() ? "has invalid value" : error.getDefaultMessage();
+    }
+
+    private static ProblemDetail validationProblem(List<FieldValidationError> errors, String instance) {
         String detail = errors.stream()
                 .map(error -> "Field '%s' %s.".formatted(error.field(), error.message()))
                 .collect(Collectors.joining(" "));
-        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "validation", "Validation failed",
-                detail, requestUri(request));
+        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "validation", "Validation failed", detail, instance);
         problem.setProperty("errors", errors);
-        return ResponseEntity.badRequest().body(problem);
+        return problem;
     }
 
     private static ProblemDetail problem(HttpStatus status, String errorType, String title,
