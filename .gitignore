@@ -13,3 +13,6 @@ out/
 ### OS ###
 .DS_Store
 Thumbs.db
+
+### Eclipse / VS Code Java build output ###
+bin/
