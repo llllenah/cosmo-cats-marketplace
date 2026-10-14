@@ -1,6 +1,9 @@
 # Cosmo Cats Intergalactic Marketplace
 
-Backend маркетплейсу космічних товарів для котів. Лабораторна робота 1: API-контракт, DDD, CRUD для `Product`, обробка помилок за RFC 9457, пагінація.
+Backend маркетплейсу космічних товарів для котів.
+
+- Lab 1: API-контракт, DDD, CRUD для `Product`, обробка помилок за RFC 9457, пагінація.
+- Lab 2: юніт-, контролерні та інтеграційні тести, покриття JaCoCo з перевіркою в CI, ціна в іншій валюті через зовнішній сервіс, застабований WireMock.
 
 ## Стек
 
@@ -8,6 +11,7 @@ Backend маркетплейсу космічних товарів для кот
 - Spring Boot 3.3 (Web, Validation)
 - Gradle (wrapper у репозиторії)
 - springdoc-openapi (Swagger UI для перегляду контракту)
+- Тести: JUnit 5, Mockito, AssertJ, MockMvc, WireMock, JaCoCo
 
 ## Запуск
 
@@ -32,8 +36,8 @@ com.cosmocats.marketplace
 │   ├── category      Category
 │   ├── cart          Cart, CartItem
 │   └── order         Order, OrderItem, OrderStatus
-├── application       ProductService, ProductValidationService, курсор пагінації, доменні винятки
-├── infrastructure    інтерфейси репозиторіїв і in-memory реалізації з mock-даними
+├── application       ProductService, ProductValidationService, ProductPriceService, курсор пагінації, винятки
+├── infrastructure    persistence: репозиторії з mock-даними; exchangerate: HTTP-клієнт сервісу курсів
 └── web               REST-контролер, DTO, ProductMapper, пагінація, валідація, обробка помилок
 ```
 
@@ -55,18 +59,21 @@ com.cosmocats.marketplace
 | POST | `/api/v1/products` | Створити продукт | 201 + `Location` |
 | PUT | `/api/v1/products/{id}` | Повністю оновити продукт | 200 |
 | DELETE | `/api/v1/products/{id}` | Видалити продукт | 204 |
+| GET | `/api/v1/products/{id}/price?currency=EUR` | Ціна продукту в іншій валюті | 200 |
 
-Коди помилок: 400 (валідація), 404 (продукт не знайдено), 409 (назва вже зайнята), 422 (категорія не існує), 500 (непередбачена помилка без деталей реалізації).
+Коди помилок: 400 (валідація), 404 (продукт не знайдено), 409 (назва вже зайнята), 422 (категорія не існує або валюту не знає сервіс курсів), 500 (непередбачена помилка без деталей реалізації), 503 (сервіс курсів недоступний).
 
 ### Валідація `ProductRequestDto`
 
 | Поле | Правила |
 |---|---|
-| `name` | обов'язкове, 3–100 символів, має містити космічне слово (`@CosmicWordCheck`) |
+| `name` | обов'язкове, 3–100 символів, має містити космічне слово в однині або множині (`@CosmicWordCheck`) |
 | `description` | необов'язкове, до 500 символів |
 | `price` | обов'язкове, більше 0, не більше 2 знаків після коми |
 | `stockQuantity` | обов'язкове, не менше 0 |
 | `categoryId` | обов'язкове, UUID існуючої категорії |
+
+Значення неправильного типу (`"categoryId": "abc"`, `"stockQuantity": 2.7`) дає 400 з назвою поля і повідомленням `has invalid value`.
 
 Параметри пагінації: `1 <= pageSize <= 100` (за замовчуванням 20), `pageToken` з `nextPageToken` попередньої відповіді. Перша сторінка запитується без `pageToken`.
 
@@ -135,7 +142,68 @@ curl "http://localhost:8080/api/v1/products?pageSize=2&pageToken=YWFhYWFhYWEtMDA
 
 Пагінація keyset: токен кодує назву й id останнього продукту на сторінці, наступна сторінка починається одразу після нього. Тому вставки й видалення між запитами не зсувають сторінки. На останній сторінці `nextPageToken` дорівнює `null`.
 
+## Ціна в іншій валюті
+
+Ціни в каталозі зберігаються в USD. `GET /api/v1/products/{id}/price?currency=EUR` бере курс із зовнішнього сервісу курсів (`GET {base-url}/v1/rates/USD/EUR` → `{"base": "USD", "target": "EUR", "rate": 0.9215}`) і округлює ціну до центів (half-even).
+
+```json
+{
+  "productId": "aaaaaaaa-0000-0000-0000-000000000001",
+  "basePrice": 12.50,
+  "baseCurrency": "USD",
+  "price": 11.52,
+  "currency": "EUR",
+  "exchangeRate": 0.9215
+}
+```
+
+| Ситуація | Відповідь |
+|---|---|
+| `currency` не з 3 великих латинських літер | 400, сервіс курсів не викликається |
+| продукт не існує | 404, сервіс курсів не викликається |
+| `currency=USD` | 200 з курсом 1, сервіс курсів не викликається |
+| сервіс курсів повернув 404 | 422 `currency-not-supported` |
+| 5xx, інший 4xx, таймаут, обрив з'єднання, не JSON, курс відсутній або ≤ 0 | 503 `exchange-rate-unavailable`, деталі тільки в лозі |
+
+Налаштування в `application.yml`: `application.exchange-rate-service.base-url`, `connect-timeout` (1s), `read-timeout` (2s).
+
+Для ручної перевірки сервіс курсів можна підняти з готовими стабами з `scripts/wiremock` (EUR, UAH, GBP; JPY відповідає з затримкою 5 с, щоб побачити 503; решта валют дає 404):
+
+```bash
+docker run --rm -p 8090:8080 -v "$PWD/scripts/wiremock:/home/wiremock" wiremock/wiremock:3.9.2
+```
+
+```bash
+curl "http://localhost:8080/api/v1/products/aaaaaaaa-0000-0000-0000-000000000001/price?currency=EUR"
+```
+
+## Тести
+
+```bash
+./gradlew build            # усі тести + звіт покриття + перевірка мінімального покриття
+./gradlew test             # те саме без складання jar
+```
+
+Скрипти `gradle/test.gradle` і `gradle/jacoco.gradle` взяті з репозиторію курсу:
+
+- `test` запускає юніт-тести (`*Test`), `integrationTest` запускає інтеграційні (`*IT`), `test` залежить від `integrationTest`;
+- `jacocoTestReport` збирає спільний звіт з обох запусків у `build/reports/coverage/index.html` (HTML і CSV);
+- `jacocoTestCoverageVerification` валить збірку, якщо будь-який файл має менше 80% покриття рядків. Виключений тільки клас з `main()`;
+- зведення по тестах пишеться в `build/reports/tests/test-summary.md`.
+
+Поточне покриття: 100% рядків, 98.8% гілок.
+
+| Рівень | Класи | Що перевіряють |
+|---|---|---|
+| Сервіси (Mockito) | `ProductServiceImplTest`, `ProductValidationServiceTest`, `ProductPriceServiceTest` | кожен метод сервісів: генерація id, 404, 409, 422, пагінація з курсором, конвертація й округлення, що репозиторій/клієнт не викликається після помилки |
+| Контролер (`@WebMvcTest`) | `ProductControllerTest` | валідація тіла, query- і path-параметрів, позитивні межові значення і негативні сценарії, неправильні типи, битий JSON, 404/409/422/500/503 у форматі problem details |
+| Юніт | `PageTokenCodecTest`, `CosmicWordValidatorTest`, `ProductMapperTest`, `GlobalExceptionHandlerTest`, доменні тести, `InMemoryRepositoriesTest` | кодування токена сторінки, космічні слова, маппінг, інваріанти доменних records, сортування й потокобезпечність сховища |
+| Інтеграційні (`@SpringBootTest`) | `ProductApiIT`, `ProductPriceIT`, `ApiContractIT` | повний CRUD через усі шари, прохід усіх сторінок токенами, сервіс курсів через WireMock (стаби, затримки, обриви з'єднання), відповідність ендпоінтів OpenAPI-контракту |
+
+CI: `.github/workflows/pull_request.yml` запускає `./gradlew build` на кожен pull request, додає зведення тестів і покриття в summary запуску і зберігає HTML-звіт покриття як артефакт `test-coverage-report`.
+
 ## Обмеження
 
 - Дані зберігаються в пам'яті й скидаються після перезапуску. База даних буде в Lab 3.
 - Перевірка унікальності назви не атомарна. У Lab 3 її замінить unique constraint у БД.
+- Курси валют не кешуються, повторних спроб і circuit breaker для сервісу курсів немає: при збої одразу 503.

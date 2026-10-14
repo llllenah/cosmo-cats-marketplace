@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Cosmo Cats Intergalactic Marketplace — Product API
   description: |
-    CRUD API for products of the Cosmo Cats marketplace.
+    CRUD API for products of the Cosmo Cats marketplace and prices in other currencies.
     All errors follow RFC 9457 (Problem Details for HTTP APIs) and are returned
     with the `application/problem+json` media type.
   version: 1.0.0
@@ -178,6 +178,50 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/products/{id}/price:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Product id
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Products]
+      operationId: getProductPrice
+      summary: Get the product price in another currency
+      description: |
+        Converts the product price from USD with the rate from the external exchange rate service.
+        The converted price is rounded to 2 decimal places (half-even).
+        For USD the service is not called and the rate is 1.
+      parameters:
+        - name: currency
+          in: query
+          required: true
+          description: ISO 4217 currency code in upper case.
+          schema:
+            type: string
+            pattern: '^[A-Z]{3}$'
+            example: EUR
+      responses:
+        '200':
+          description: Converted price
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPrice'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/CurrencyNotSupported'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ExchangeRateUnavailable'
+
 components:
   schemas:
     ProductRequest:
@@ -189,7 +233,7 @@ components:
           minLength: 3
           maxLength: 100
           description: |
-            Product name. Must contain at least one cosmic word:
+            Product name. Must contain at least one cosmic word (singular or plural):
             star, galaxy, comet, cosmic, space, planet, moon, nebula, orbit or asteroid.
           example: Anti-gravity star yarn ball
         description:
@@ -272,6 +316,33 @@ components:
           description: Token for the next page. Null on the last page.
           example: YWFhYWFhYWEtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAzOkNvbWV0IHRhaWwgc2NyYXRjaGluZyBwb3N0
 
+    ProductPrice:
+      type: object
+      required: [productId, basePrice, baseCurrency, price, currency, exchangeRate]
+      properties:
+        productId:
+          type: string
+          format: uuid
+          example: aaaaaaaa-0000-0000-0000-000000000001
+        basePrice:
+          type: number
+          description: Catalog price in the base currency.
+          example: 12.50
+        baseCurrency:
+          type: string
+          example: USD
+        price:
+          type: number
+          description: Price in the requested currency, rounded to 2 decimal places.
+          example: 11.52
+        currency:
+          type: string
+          example: EUR
+        exchangeRate:
+          type: number
+          description: Units of the requested currency for 1 unit of the base currency.
+          example: 0.9215
+
     ProblemDetail:
       type: object
       description: RFC 9457 problem details object.
@@ -319,7 +390,10 @@ components:
 
   responses:
     ValidationError:
-      description: Request is invalid (body, path or query parameters)
+      description: |
+        Request is invalid (body, path or query parameters). A body value of the wrong type,
+        e.g. "categoryId": "abc" or "stockQuantity": 2.7, is reported for its field with
+        the message "has invalid value".
       content:
         application/problem+json:
           schema:
@@ -369,6 +443,32 @@ components:
             status: 422
             detail: Category with id '99999999-9999-9999-9999-999999999999' does not exist.
             instance: /api/v1/products
+    CurrencyNotSupported:
+      description: The exchange rate service does not know the requested currency
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/currency-not-supported
+            title: Currency not supported
+            status: 422
+            detail: Currency 'XYZ' is not supported by the exchange rate service.
+            instance: /api/v1/products/aaaaaaaa-0000-0000-0000-000000000001/price
+    ExchangeRateUnavailable:
+      description: |
+        The exchange rate service failed, did not answer in time or returned an invalid rate.
+        Details of the failure are logged and never exposed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/exchange-rate-unavailable
+            title: Exchange rate unavailable
+            status: 503
+            detail: Exchange rates are temporarily unavailable. Please try again later.
+            instance: /api/v1/products/aaaaaaaa-0000-0000-0000-000000000001/price
     InternalError:
       description: Unexpected server error. Internal details are never exposed.
       content:
