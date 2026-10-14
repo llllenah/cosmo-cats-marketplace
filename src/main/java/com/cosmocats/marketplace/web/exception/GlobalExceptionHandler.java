@@ -39,6 +39,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final String ERROR_TYPE_BASE_URL = "https://cosmo-cats.market/errors/";
 
+    // Bean Validation returns violations from a HashSet, so one field with several errors
+    // came back in random order. Sorting by message too makes the response stable.
+    private static final Comparator<FieldValidationError> ERROR_ORDER = Comparator
+            .comparing(FieldValidationError::field)
+            .thenComparing(FieldValidationError::message);
+
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
                                                                   HttpHeaders headers,
@@ -46,7 +52,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                                   WebRequest request) {
         List<FieldValidationError> errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> new FieldValidationError(error.getField(), fieldErrorMessage(error)))
-                .sorted(Comparator.comparing(FieldValidationError::field))
+                .sorted(ERROR_ORDER)
                 .toList();
         return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
     }
@@ -61,7 +67,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         .map(error -> new FieldValidationError(
                                 result.getMethodParameter().getParameterName(),
                                 error.getDefaultMessage())))
-                .sorted(Comparator.comparing(FieldValidationError::field))
+                .sorted(ERROR_ORDER)
                 .toList();
         return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
     }
@@ -85,7 +91,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleProductValidation(ProductValidationException ex, HttpServletRequest request) {
         List<FieldValidationError> errors = ex.getViolations().stream()
                 .map(violation -> new FieldValidationError(violation.field(), violation.message()))
-                .sorted(Comparator.comparing(FieldValidationError::field))
+                .sorted(ERROR_ORDER)
                 .toList();
         return validationProblem(errors, request.getRequestURI());
     }
