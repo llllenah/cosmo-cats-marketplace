@@ -1,6 +1,10 @@
 spring:
   application:
     name: cosmo-cats-marketplace
+  jackson:
+    deserialization:
+      # By default Jackson silently truncates 2.7 to 2 for integer fields like stockQuantity
+      accept-float-as-int: false
 
 server:
   port: 8080

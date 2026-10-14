@@ -5,6 +5,7 @@ import com.cosmocats.marketplace.application.exception.ProductNameAlreadyExistsE
 import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
 import com.cosmocats.marketplace.application.exception.ProductValidationException;
 import com.cosmocats.marketplace.web.common.InvalidPageTokenException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -70,6 +71,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                                   HttpHeaders headers,
                                                                   HttpStatusCode status,
                                                                   WebRequest request) {
+        // Valid JSON with a value of the wrong type, e.g. "categoryId": "abc" or "stockQuantity": 2.7
+        if (ex.getCause() instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
+            List<FieldValidationError> errors = List.of(new FieldValidationError(jsonPath(mismatch), "has invalid value"));
+            return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
+        }
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "malformed-request", "Malformed request body",
                 "Request body is missing or is not valid JSON.", requestUri(request));
         return ResponseEntity.badRequest().body(problem);
@@ -113,6 +119,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.error("Unexpected error while processing {} {}", request.getMethod(), request.getRequestURI(), ex);
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Internal server error",
                 "Something went wrong on our side. Please try again later.", request.getRequestURI());
+    }
+
+    private static String jsonPath(MismatchedInputException ex) {
+        return ex.getPath().stream()
+                .map(reference -> reference.getFieldName() != null
+                        ? reference.getFieldName()
+                        : "[" + reference.getIndex() + "]")
+                .collect(Collectors.joining("."));
     }
 
     private static String fieldErrorMessage(FieldError error) {
