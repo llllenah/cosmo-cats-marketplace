@@ -1,8 +1,12 @@
 package com.cosmocats.marketplace.web.product;
 
 import com.cosmocats.marketplace.application.exception.CategoryNotFoundException;
+import com.cosmocats.marketplace.application.exception.ExchangeRateUnavailableException;
 import com.cosmocats.marketplace.application.exception.ProductNameAlreadyExistsException;
 import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
+import com.cosmocats.marketplace.application.exception.UnsupportedCurrencyException;
+import com.cosmocats.marketplace.application.pricing.ProductPrice;
+import com.cosmocats.marketplace.application.pricing.ProductPriceService;
 import com.cosmocats.marketplace.application.product.PageCursor;
 import com.cosmocats.marketplace.application.product.PagedResult;
 import com.cosmocats.marketplace.application.product.ProductService;
@@ -77,6 +81,9 @@ class ProductControllerTest {
 
     @MockBean
     private ProductService productService;
+
+    @MockBean
+    private ProductPriceService productPriceService;
 
     @Nested
     @DisplayName("POST /api/v1/products")
@@ -173,6 +180,15 @@ class ProductControllerTest {
                     .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.type").value(ERRORS_BASE_URL + "malformed-request"))
                     .andExpect(jsonPath("$.detail").value("Request body is missing or is not valid JSON."));
+        }
+
+        @Test
+        void rejectsJsonArrayInsteadOfObject() throws Exception {
+            mockMvc.perform(post(PRODUCTS_URL).contentType(MediaType.APPLICATION_JSON).content("[]"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value(ERRORS_BASE_URL + "malformed-request"));
+
+            verifyNoInteractions(productService);
         }
 
         @Test
@@ -441,6 +457,74 @@ class ProductControllerTest {
             mockMvc.perform(delete(PRODUCT_URL, PRODUCT_ID))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.type").value(ERRORS_BASE_URL + "product-not-found"));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/v1/products/{id}/price")
+    class GetProductPrice {
+
+        private static final String PRICE_URL = "/api/v1/products/{id}/price";
+
+        @Test
+        void returnsConvertedPrice() throws Exception {
+            when(productPriceService.getPrice(PRODUCT_ID, "EUR")).thenReturn(new ProductPrice(PRODUCT_ID,
+                    new BigDecimal("12.50"), "USD", new BigDecimal("11.50"), "EUR", new BigDecimal("0.92")));
+
+            mockMvc.perform(get(PRICE_URL, PRODUCT_ID).param("currency", "EUR"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.productId").value(PRODUCT_ID.toString()))
+                    .andExpect(jsonPath("$.basePrice").value(12.50))
+                    .andExpect(jsonPath("$.baseCurrency").value("USD"))
+                    .andExpect(jsonPath("$.price").value(11.50))
+                    .andExpect(jsonPath("$.currency").value("EUR"))
+                    .andExpect(jsonPath("$.exchangeRate").value(0.92));
+        }
+
+        // @Pattern on a @RequestParam is checked by Spring MVC method validation without @Validated
+        // on the controller (Spring Framework 6.1+), errors come as HandlerMethodValidationException
+        @ParameterizedTest(name = "currency={0}")
+        @ValueSource(strings = {"eur", "EURO", "E1R", "€"})
+        void rejectsCurrencyThatIsNotIsoCode(String currency) throws Exception {
+            mockMvc.perform(get(PRICE_URL, PRODUCT_ID).param("currency", currency))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value(ERRORS_BASE_URL + "validation"))
+                    .andExpect(jsonPath("$.detail").value(
+                            "Field 'currency' must be a 3-letter ISO 4217 code in upper case."))
+                    .andExpect(jsonPath("$.errors[0].field").value("currency"));
+
+            verifyNoInteractions(productPriceService);
+        }
+
+        @Test
+        void rejectsMissingCurrency() throws Exception {
+            mockMvc.perform(get(PRICE_URL, PRODUCT_ID))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.detail").value("Required parameter 'currency' is not present."));
+
+            verifyNoInteractions(productPriceService);
+        }
+
+        @Test
+        void returns422ForCurrencyUnknownToExchangeService() throws Exception {
+            when(productPriceService.getPrice(PRODUCT_ID, "XYZ")).thenThrow(new UnsupportedCurrencyException("XYZ"));
+
+            mockMvc.perform(get(PRICE_URL, PRODUCT_ID).param("currency", "XYZ"))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.type").value(ERRORS_BASE_URL + "currency-not-supported"))
+                    .andExpect(jsonPath("$.title").value("Currency not supported"));
+        }
+
+        @Test
+        void returns503WithoutDetailsOfExternalServiceFailure() throws Exception {
+            when(productPriceService.getPrice(PRODUCT_ID, "EUR")).thenThrow(new ExchangeRateUnavailableException(
+                    "call failed", new IllegalStateException("http://internal-rates:8090 refused")));
+
+            mockMvc.perform(get(PRICE_URL, PRODUCT_ID).param("currency", "EUR"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.type").value(ERRORS_BASE_URL + "exchange-rate-unavailable"))
+                    .andExpect(content().string(not(containsString("internal-rates"))));
         }
     }
 

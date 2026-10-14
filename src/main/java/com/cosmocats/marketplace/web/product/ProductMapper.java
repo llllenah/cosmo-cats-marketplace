@@ -2,11 +2,13 @@ package com.cosmocats.marketplace.web.product;
 
 import com.cosmocats.marketplace.application.exception.ProductValidationException;
 import com.cosmocats.marketplace.application.exception.ProductValidationException.Violation;
+import com.cosmocats.marketplace.application.pricing.ProductPrice;
 import com.cosmocats.marketplace.application.product.PagedResult;
 import com.cosmocats.marketplace.domain.product.Product;
 import com.cosmocats.marketplace.web.common.PageInfo;
 import com.cosmocats.marketplace.web.common.PageResponse;
 import com.cosmocats.marketplace.web.common.PageTokenCodec;
+import com.cosmocats.marketplace.web.product.dto.ProductPriceResponseDto;
 import com.cosmocats.marketplace.web.product.dto.ProductRequestDto;
 import com.cosmocats.marketplace.web.product.dto.ProductResponseDto;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +58,17 @@ public class ProductMapper {
                 product.price(),
                 product.stockQuantity(),
                 product.categoryId()
+        );
+    }
+
+    public ProductPriceResponseDto toDto(ProductPrice productPrice) {
+        return new ProductPriceResponseDto(
+                productPrice.productId(),
+                productPrice.basePrice(),
+                productPrice.baseCurrency(),
+                productPrice.price(),
+                productPrice.currency(),
+                productPrice.exchangeRate()
         );
     }
 

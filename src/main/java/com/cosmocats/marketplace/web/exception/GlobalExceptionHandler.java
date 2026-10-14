@@ -1,10 +1,13 @@
 package com.cosmocats.marketplace.web.exception;
 
 import com.cosmocats.marketplace.application.exception.CategoryNotFoundException;
+import com.cosmocats.marketplace.application.exception.ExchangeRateUnavailableException;
 import com.cosmocats.marketplace.application.exception.ProductNameAlreadyExistsException;
 import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
 import com.cosmocats.marketplace.application.exception.ProductValidationException;
+import com.cosmocats.marketplace.application.exception.UnsupportedCurrencyException;
 import com.cosmocats.marketplace.web.common.InvalidPageTokenException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +29,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -120,6 +124,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(UnsupportedCurrencyException.class)
+    public ProblemDetail handleUnsupportedCurrency(UnsupportedCurrencyException ex, HttpServletRequest request) {
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY, "currency-not-supported", "Currency not supported",
+                ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(ExchangeRateUnavailableException.class)
+    public ProblemDetail handleExchangeRateUnavailable(ExchangeRateUnavailableException ex, HttpServletRequest request) {
+        // The cause may contain URLs and messages of the external service, so it goes to the log only
+        log.warn("Exchange rate is unavailable for {}", request.getRequestURI(), ex);
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "exchange-rate-unavailable", "Exchange rate unavailable",
+                "Exchange rates are temporarily unavailable. Please try again later.", request.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpectedException(Exception ex, HttpServletRequest request) {
         log.error("Unexpected error while processing {} {}", request.getMethod(), request.getRequestURI(), ex);
@@ -129,9 +147,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static String jsonPath(MismatchedInputException ex) {
         return ex.getPath().stream()
-                .map(reference -> reference.getFieldName() != null
-                        ? reference.getFieldName()
-                        : "[" + reference.getIndex() + "]")
+                .map(JsonMappingException.Reference::getFieldName)
+                .filter(Objects::nonNull)
                 .collect(Collectors.joining("."));
     }
 
