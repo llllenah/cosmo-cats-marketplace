@@ -1,5 +1,6 @@
 package com.cosmocats.marketplace.infrastructure.persistence;
 
+import com.cosmocats.marketplace.domain.cat.CosmoCat;
 import com.cosmocats.marketplace.domain.category.Category;
 import com.cosmocats.marketplace.domain.product.Product;
 import lombok.experimental.UtilityClass;
@@ -24,6 +25,14 @@ class MockCatalogData {
                 new Category(ANTI_GRAVITY_TOYS_ID, "Anti-gravity toys"),
                 new Category(COSMIC_FOOD_ID, "Cosmic food"),
                 new Category(SPACE_GEAR_ID, "Space gear")
+        );
+    }
+
+    static List<CosmoCat> cosmoCats() {
+        return List.of(
+                new CosmoCat(UUID.fromString("cccccccc-0000-0000-0000-000000000001"), "Luna", "Moon"),
+                new CosmoCat(UUID.fromString("cccccccc-0000-0000-0000-000000000002"), "Orion", "Mars"),
+                new CosmoCat(UUID.fromString("cccccccc-0000-0000-0000-000000000003"), "Nova", "Kepler-452b")
         );
     }
 

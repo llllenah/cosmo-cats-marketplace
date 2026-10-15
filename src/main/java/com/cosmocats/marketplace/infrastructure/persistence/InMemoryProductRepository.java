@@ -47,6 +47,14 @@ public class InMemoryProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findByCategoryId(UUID categoryId) {
+        return products.values().stream()
+                .filter(product -> product.categoryId().equals(categoryId))
+                .sorted(PageCursor.PRODUCT_ORDER)
+                .toList();
+    }
+
+    @Override
     public long count() {
         return products.size();
     }

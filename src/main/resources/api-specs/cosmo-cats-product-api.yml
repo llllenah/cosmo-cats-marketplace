@@ -2,7 +2,8 @@ openapi: 3.0.3
 info:
   title: Cosmo Cats Intergalactic Marketplace — Product API
   description: |
-    CRUD API for products of the Cosmo Cats marketplace and prices in other currencies.
+    CRUD API for products of the Cosmo Cats marketplace, prices in other currencies
+    and endpoints behind feature toggles.
     All errors follow RFC 9457 (Problem Details for HTTP APIs) and are returned
     with the `application/problem+json` media type.
   version: 1.0.0
@@ -12,6 +13,10 @@ servers:
 tags:
   - name: Products
     description: Operations with marketplace products
+  - name: Feature toggled
+    description: |
+      Endpoints behind feature toggles (`feature.<key>.enabled` in the configuration).
+      When the feature is switched off they answer 404 with the `feature-not-available` problem type.
 
 paths:
   /api/v1/products:
@@ -222,6 +227,48 @@ paths:
         '503':
           $ref: '#/components/responses/ExchangeRateUnavailable'
 
+  /api/v1/cosmo-cats:
+    get:
+      tags: [Feature toggled]
+      operationId: getCosmoCats
+      summary: Get all cosmo cats
+      description: Available only when `feature.cosmoCats.enabled` is true (on by default).
+      responses:
+        '200':
+          description: Cosmo cats sorted by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CosmoCat'
+        '404':
+          $ref: '#/components/responses/FeatureNotAvailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/kitty-products:
+    get:
+      tags: [Feature toggled]
+      operationId: getKittyProducts
+      summary: Get products picked for kittens
+      description: |
+        Products of the category from `application.kitty-products.category-id`, sorted by name.
+        Available only when `feature.kittyProducts.enabled` is true (off by default).
+      responses:
+        '200':
+          description: Products for kittens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductResponse'
+        '404':
+          $ref: '#/components/responses/FeatureNotAvailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   schemas:
     ProductRequest:
@@ -342,6 +389,21 @@ components:
           type: number
           description: Units of the requested currency for 1 unit of the base currency.
           example: 0.9215
+
+    CosmoCat:
+      type: object
+      required: [id, name, homePlanet]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: cccccccc-0000-0000-0000-000000000001
+        name:
+          type: string
+          example: Luna
+        homePlanet:
+          type: string
+          example: Moon
 
     ProblemDetail:
       type: object
@@ -469,6 +531,18 @@ components:
             status: 503
             detail: Exchange rates are temporarily unavailable. Please try again later.
             instance: /api/v1/products/aaaaaaaa-0000-0000-0000-000000000001/price
+    FeatureNotAvailable:
+      description: The feature behind this endpoint is switched off in the current environment
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/feature-not-available
+            title: Feature not available
+            status: 404
+            detail: Feature 'kittyProducts' is not available.
+            instance: /api/v1/kitty-products
     InternalError:
       description: Unexpected server error. Internal details are never exposed.
       content:

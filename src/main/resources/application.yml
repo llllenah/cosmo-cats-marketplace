@@ -14,7 +14,18 @@ springdoc:
     path: /swagger-ui.html
     url: /api-specs/cosmo-cats-product-api.yml
 
+# Feature toggles, checked by FeatureToggleAspect for methods marked with @FeatureToggle.
+# Can be overridden per environment, e.g. FEATURE_COSMOCATS_ENABLED=false
+feature:
+  cosmoCats:
+    enabled: true
+  kittyProducts:
+    enabled: false
+
 application:
+  kitty-products:
+    # Anti-gravity toys
+    category-id: 11111111-1111-1111-1111-111111111111
   pricing:
     # Currency of all product prices in the catalog
     base-currency: USD
