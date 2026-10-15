@@ -1,6 +1,7 @@
 package com.cosmocats.marketplace.infrastructure.persistence;
 
 import com.cosmocats.marketplace.application.product.PageCursor;
+import com.cosmocats.marketplace.domain.cat.CosmoCat;
 import com.cosmocats.marketplace.domain.category.Category;
 import com.cosmocats.marketplace.domain.product.Product;
 import org.junit.jupiter.api.DisplayName;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 
 @DisplayName("In-memory repositories")
 class InMemoryRepositoriesTest {
@@ -80,6 +82,16 @@ class InMemoryRepositoriesTest {
         }
 
         @Test
+        void findsProductsOfCategorySortedByName() {
+            repository.save(new Product(UUID.randomUUID(), "Asteroid chew toy", null, BigDecimal.ONE, 1,
+                    MockCatalogData.SPACE_GEAR_ID));
+
+            assertThat(names(repository.findByCategoryId(MockCatalogData.SPACE_GEAR_ID)))
+                    .containsExactly("Asteroid chew toy", "Comet tail scratching post", "Nebula nap capsule");
+            assertThat(repository.findByCategoryId(UUID.randomUUID())).isEmpty();
+        }
+
+        @Test
         void deletesProduct() {
             assertThat(repository.existsById(YARN_BALL_ID)).isTrue();
 
@@ -137,6 +149,21 @@ class InMemoryRepositoriesTest {
         void checksIfCategoryExists() {
             assertThat(repository.existsById(MockCatalogData.ANTI_GRAVITY_TOYS_ID)).isTrue();
             assertThat(repository.existsById(UUID.randomUUID())).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("InMemoryCosmoCatRepository")
+    class CosmoCatRepositoryTest {
+
+        @Test
+        void returnsMockCatsSortedByName() {
+            assertThat(new InMemoryCosmoCatRepository().findAll())
+                    .extracting(CosmoCat::name, CosmoCat::homePlanet)
+                    .containsExactly(
+                            tuple("Luna", "Moon"),
+                            tuple("Nova", "Kepler-452b"),
+                            tuple("Orion", "Mars"));
         }
     }
 }

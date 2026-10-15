@@ -21,6 +21,11 @@ public interface ProductRepository {
      */
     List<Product> findPageAfter(PageCursor cursor, int limit);
 
+    /**
+     * Returns products of the category sorted by name and id.
+     */
+    List<Product> findByCategoryId(UUID categoryId);
+
     long count();
 
     boolean existsById(UUID id);

@@ -6,6 +6,7 @@ import com.cosmocats.marketplace.application.exception.ProductNameAlreadyExistsE
 import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
 import com.cosmocats.marketplace.application.exception.ProductValidationException;
 import com.cosmocats.marketplace.application.exception.UnsupportedCurrencyException;
+import com.cosmocats.marketplace.featuretoggle.FeatureNotAvailableException;
 import com.cosmocats.marketplace.web.common.InvalidPageTokenException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
@@ -136,6 +137,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("Exchange rate is unavailable for {}", request.getRequestURI(), ex);
         return problem(HttpStatus.SERVICE_UNAVAILABLE, "exchange-rate-unavailable", "Exchange rate unavailable",
                 "Exchange rates are temporarily unavailable. Please try again later.", request.getRequestURI());
+    }
+
+    // For clients a switched off feature looks like an endpoint that does not exist yet
+    @ExceptionHandler(FeatureNotAvailableException.class)
+    public ProblemDetail handleFeatureNotAvailable(FeatureNotAvailableException ex, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "feature-not-available", "Feature not available",
+                ex.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)

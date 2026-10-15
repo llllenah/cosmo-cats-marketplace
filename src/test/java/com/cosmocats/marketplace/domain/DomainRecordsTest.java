@@ -1,5 +1,6 @@
 package com.cosmocats.marketplace.domain;
 
+import com.cosmocats.marketplace.domain.cat.CosmoCat;
 import com.cosmocats.marketplace.domain.category.Category;
 import com.cosmocats.marketplace.domain.product.Product;
 import org.junit.jupiter.api.DisplayName;
@@ -11,8 +12,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DisplayName("Product and Category")
-class ProductAndCategoryTest {
+@DisplayName("Product, Category and CosmoCat")
+class DomainRecordsTest {
 
     private static final UUID CATEGORY_ID = UUID.randomUUID();
 
@@ -45,5 +46,13 @@ class ProductAndCategoryTest {
         assertThatThrownBy(() -> new Category(CATEGORY_ID, "  "))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("name must not be blank");
+    }
+
+    @Test
+    void cosmoCatRequiresAllFields() {
+        assertThat(new CosmoCat(CATEGORY_ID, "Luna", "Moon").homePlanet()).isEqualTo("Moon");
+        assertThatThrownBy(() -> new CosmoCat(null, "Luna", "Moon")).hasMessage("id must not be null");
+        assertThatThrownBy(() -> new CosmoCat(CATEGORY_ID, null, "Moon")).hasMessage("name must not be null");
+        assertThatThrownBy(() -> new CosmoCat(CATEGORY_ID, "Luna", null)).hasMessage("homePlanet must not be null");
     }
 }
