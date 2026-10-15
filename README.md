@@ -4,11 +4,12 @@ Backend маркетплейсу космічних товарів для кот
 
 - Lab 1: API-контракт, DDD, CRUD для `Product`, обробка помилок за RFC 9457, пагінація.
 - Lab 2: юніт-, контролерні та інтеграційні тести, покриття JaCoCo з перевіркою в CI, ціна в іншій валюті через зовнішній сервіс, застабований WireMock.
+- Lab 2.1 (додаткова): feature toggles на рівні середовища зі Spring AOP.
 
 ## Стек
 
 - Java 17+
-- Spring Boot 3.3 (Web, Validation)
+- Spring Boot 3.3 (Web, Validation, AOP)
 - Gradle (wrapper у репозиторії)
 - springdoc-openapi (Swagger UI для перегляду контракту)
 - Тести: JUnit 5, Mockito, AssertJ, MockMvc, WireMock, JaCoCo
@@ -38,6 +39,7 @@ com.cosmocats.marketplace
 │   └── order         Order, OrderItem, OrderStatus
 ├── application       ProductService, ProductValidationService, ProductPriceService, курсор пагінації, винятки
 ├── infrastructure    persistence: репозиторії з mock-даними; exchangerate: HTTP-клієнт сервісу курсів
+├── featuretoggle     @FeatureToggle, FeatureToggleAspect, FeatureToggleService, конфігурація прапорів
 └── web               REST-контролер, DTO, ProductMapper, пагінація, валідація, обробка помилок
 ```
 
@@ -60,6 +62,8 @@ com.cosmocats.marketplace
 | PUT | `/api/v1/products/{id}` | Повністю оновити продукт | 200 |
 | DELETE | `/api/v1/products/{id}` | Видалити продукт | 204 |
 | GET | `/api/v1/products/{id}/price?currency=EUR` | Ціна продукту в іншій валюті | 200 |
+| GET | `/api/v1/cosmo-cats` | Космо-коти (за прапором `cosmoCats`) | 200 |
+| GET | `/api/v1/kitty-products` | Товари для кошенят (за прапором `kittyProducts`) | 200 |
 
 Коди помилок: 400 (валідація), 404 (продукт не знайдено), 409 (назва вже зайнята), 422 (категорія не існує або валюту не знає сервіс курсів), 500 (непередбачена помилка без деталей реалізації), 503 (сервіс курсів недоступний).
 
@@ -177,6 +181,26 @@ docker run --rm -p 8090:8080 -v "$PWD/scripts/wiremock:/home/wiremock" wiremock/
 curl "http://localhost:8080/api/v1/products/aaaaaaaa-0000-0000-0000-000000000001/price?currency=EUR"
 ```
 
+## Feature toggles
+
+Функції вмикаються й вимикаються в конфігурації без зміни коду:
+
+```yaml
+feature:
+  cosmoCats:
+    enabled: true      # GET /api/v1/cosmo-cats
+  kittyProducts:
+    enabled: false     # GET /api/v1/kitty-products
+```
+
+- Метод або весь клас позначається `@FeatureToggle(Feature.COSMO_CATS)`. `FeatureToggleAspect` (`@Around`) перевіряє прапор до виклику: якщо функція вимкнена, метод не викликається, кидається `FeatureNotAvailableException`, клієнт отримує 404 з типом `feature-not-available`. Анотація на методі має пріоритет над анотацією на класі.
+- `FeatureToggleConfig` читає всі `feature.<key>.enabled` з `Environment` у мапу, тому прапор можна перевизначити для середовища: профілем, змінною оточення `FEATURE_COSMOCATS_ENABLED=false` або аргументом `--feature.cosmoCats.enabled=false`. `cosmoCats`, `cosmo-cats` і `cosmocats` вважаються однією функцією.
+- Прапор, якого немає в конфігурації, означає «вимкнено»: помилка в назві не вмикає недороблену функцію. Значення не `true`/`false` або одна функція з різними значеннями під різними написаннями зупиняють запуск застосунку.
+- Обмеження Spring AOP через проксі: виклик анотованого методу з іншого методу того самого класу не перевіряється (є тест, що це фіксує).
+- Прапори читаються один раз при старті, для зміни потрібен перезапуск.
+
+Тести: `FeatureToggleAspectTest`, `FeatureToggleConfigTest`, `CosmoCatServiceTest` і `KittyProductServiceTest` (маленький Spring-контекст зі справжнім аспектом), `FeatureToggledControllersTest`, `DefaultFeatureTogglesIT` і `SwitchedFeatureTogglesIT` (той самий застосунок з прапорами з `application.yml` і з перевизначеними для середовища).
+
 ## Тести
 
 ```bash
@@ -191,7 +215,7 @@ curl "http://localhost:8080/api/v1/products/aaaaaaaa-0000-0000-0000-000000000001
 - `jacocoTestCoverageVerification` валить збірку, якщо будь-який файл має менше 80% покриття рядків. Виключений тільки клас з `main()`;
 - зведення по тестах пишеться в `build/reports/tests/test-summary.md`.
 
-Поточне покриття: 100% рядків, 98.8% гілок.
+Поточне покриття: 100% рядків, 98.8% гілок (243 тести).
 
 | Рівень | Класи | Що перевіряють |
 |---|---|---|
