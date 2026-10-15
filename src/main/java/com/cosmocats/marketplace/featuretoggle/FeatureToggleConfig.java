@@ -38,8 +38,21 @@ public class FeatureToggleConfig {
     public record FeatureFlags(Map<String, Boolean> enabledByKey) {
 
         public FeatureFlags {
+            // cosmoCats from application.yml and cosmocats from FEATURE_COSMOCATS_ENABLED come as two keys.
+            // Binder already resolved both to the value with the highest priority, so they are equal.
             enabledByKey = enabledByKey.entrySet().stream()
-                    .collect(Collectors.toUnmodifiableMap(entry -> normalize(entry.getKey()), Map.Entry::getValue));
+                    .collect(Collectors.toUnmodifiableMap(
+                            entry -> normalize(entry.getKey()),
+                            Map.Entry::getValue,
+                            FeatureFlags::sameValueOrFail));
+        }
+
+        private static Boolean sameValueOrFail(Boolean first, Boolean second) {
+            if (!first.equals(second)) {
+                throw new IllegalStateException("The same feature flag is configured with different values "
+                        + "under different spellings, e.g. cosmoCats and cosmo-cats");
+            }
+            return first;
         }
 
         public boolean isEnabled(String key) {

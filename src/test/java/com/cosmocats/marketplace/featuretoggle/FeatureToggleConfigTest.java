@@ -51,6 +51,21 @@ class FeatureToggleConfigTest {
     }
 
     @Test
+    void failsOnStartupWhenOneFeatureHasConflictingValuesUnderDifferentSpellings() {
+        contextRunner.withPropertyValues("feature.cosmoCats.enabled=true", "feature.cosmo-cats.enabled=false")
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure().hasRootCauseMessage("The same feature flag is configured with different values "
+                                + "under different spellings, e.g. cosmoCats and cosmo-cats"));
+    }
+
+    @Test
+    void mergesSpellingsOfOneFeatureWithTheSameValue() {
+        FeatureFlags flags = new FeatureFlags(Map.of("cosmoCats", false, "cosmocats", false));
+
+        assertThat(flags.enabledByKey()).containsExactly(Map.entry("cosmocats", false));
+    }
+
+    @Test
     void featureFlagsMapCannotBeChangedFromOutside() {
         Map<String, Boolean> source = new HashMap<>(Map.of("cosmocats", true));
         FeatureFlags flags = new FeatureFlags(source);
