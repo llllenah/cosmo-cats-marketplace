@@ -25,9 +25,7 @@ public class FeatureToggleConfig {
                 .bind(FEATURE_PREFIX, Bindable.mapOf(String.class, FeatureFlag.class))
                 .orElse(Map.of());
         return new FeatureFlags(flags.entrySet().stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        entry -> FeatureFlags.normalize(entry.getKey()),
-                        entry -> entry.getValue().enabled())));
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().enabled())));
     }
 
     record FeatureFlag(boolean enabled) {
@@ -40,14 +38,15 @@ public class FeatureToggleConfig {
     public record FeatureFlags(Map<String, Boolean> enabledByKey) {
 
         public FeatureFlags {
-            enabledByKey = Map.copyOf(enabledByKey);
+            enabledByKey = enabledByKey.entrySet().stream()
+                    .collect(Collectors.toUnmodifiableMap(entry -> normalize(entry.getKey()), Map.Entry::getValue));
         }
 
         public boolean isEnabled(String key) {
             return enabledByKey.getOrDefault(normalize(key), false);
         }
 
-        static String normalize(String key) {
+        private static String normalize(String key) {
             return key.replace("-", "").toLowerCase(Locale.ROOT);
         }
     }
