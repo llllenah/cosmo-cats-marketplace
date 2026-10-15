@@ -1,10 +1,14 @@
 package com.cosmocats.marketplace.web.exception;
 
 import com.cosmocats.marketplace.application.exception.CategoryNotFoundException;
+import com.cosmocats.marketplace.application.exception.ExchangeRateUnavailableException;
 import com.cosmocats.marketplace.application.exception.ProductNameAlreadyExistsException;
 import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
 import com.cosmocats.marketplace.application.exception.ProductValidationException;
+import com.cosmocats.marketplace.application.exception.UnsupportedCurrencyException;
 import com.cosmocats.marketplace.web.common.InvalidPageTokenException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -25,6 +29,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -38,6 +43,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final String ERROR_TYPE_BASE_URL = "https://cosmo-cats.market/errors/";
 
+    // Bean Validation returns violations from a HashSet, so one field with several errors
+    // came back in random order. Sorting by message too makes the response stable.
+    private static final Comparator<FieldValidationError> ERROR_ORDER = Comparator
+            .comparing(FieldValidationError::field)
+            .thenComparing(FieldValidationError::message);
+
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
                                                                   HttpHeaders headers,
@@ -45,7 +56,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                                   WebRequest request) {
         List<FieldValidationError> errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> new FieldValidationError(error.getField(), fieldErrorMessage(error)))
-                .sorted(Comparator.comparing(FieldValidationError::field))
+                .sorted(ERROR_ORDER)
                 .toList();
         return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
     }
@@ -60,7 +71,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         .map(error -> new FieldValidationError(
                                 result.getMethodParameter().getParameterName(),
                                 error.getDefaultMessage())))
-                .sorted(Comparator.comparing(FieldValidationError::field))
+                .sorted(ERROR_ORDER)
                 .toList();
         return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
     }
@@ -70,6 +81,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                                   HttpHeaders headers,
                                                                   HttpStatusCode status,
                                                                   WebRequest request) {
+        // Valid JSON with a value of the wrong type, e.g. "categoryId": "abc" or "stockQuantity": 2.7
+        if (ex.getCause() instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
+            List<FieldValidationError> errors = List.of(new FieldValidationError(jsonPath(mismatch), "has invalid value"));
+            return ResponseEntity.badRequest().body(validationProblem(errors, requestUri(request)));
+        }
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "malformed-request", "Malformed request body",
                 "Request body is missing or is not valid JSON.", requestUri(request));
         return ResponseEntity.badRequest().body(problem);
@@ -79,7 +95,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleProductValidation(ProductValidationException ex, HttpServletRequest request) {
         List<FieldValidationError> errors = ex.getViolations().stream()
                 .map(violation -> new FieldValidationError(violation.field(), violation.message()))
-                .sorted(Comparator.comparing(FieldValidationError::field))
+                .sorted(ERROR_ORDER)
                 .toList();
         return validationProblem(errors, request.getRequestURI());
     }
@@ -108,11 +124,32 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(UnsupportedCurrencyException.class)
+    public ProblemDetail handleUnsupportedCurrency(UnsupportedCurrencyException ex, HttpServletRequest request) {
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY, "currency-not-supported", "Currency not supported",
+                ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(ExchangeRateUnavailableException.class)
+    public ProblemDetail handleExchangeRateUnavailable(ExchangeRateUnavailableException ex, HttpServletRequest request) {
+        // The cause may contain URLs and messages of the external service, so it goes to the log only
+        log.warn("Exchange rate is unavailable for {}", request.getRequestURI(), ex);
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "exchange-rate-unavailable", "Exchange rate unavailable",
+                "Exchange rates are temporarily unavailable. Please try again later.", request.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpectedException(Exception ex, HttpServletRequest request) {
         log.error("Unexpected error while processing {} {}", request.getMethod(), request.getRequestURI(), ex);
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Internal server error",
                 "Something went wrong on our side. Please try again later.", request.getRequestURI());
+    }
+
+    private static String jsonPath(MismatchedInputException ex) {
+        return ex.getPath().stream()
+                .map(JsonMappingException.Reference::getFieldName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining("."));
     }
 
     private static String fieldErrorMessage(FieldError error) {

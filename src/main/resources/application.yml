@@ -1,6 +1,10 @@
 spring:
   application:
     name: cosmo-cats-marketplace
+  jackson:
+    deserialization:
+      # By default Jackson silently truncates 2.7 to 2 for integer fields like stockQuantity
+      accept-float-as-int: false
 
 server:
   port: 8080
@@ -9,3 +13,13 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     url: /api-specs/cosmo-cats-product-api.yml
+
+application:
+  pricing:
+    # Currency of all product prices in the catalog
+    base-currency: USD
+  # External service with currency exchange rates (stubbed with WireMock in tests)
+  exchange-rate-service:
+    base-url: http://localhost:8090
+    connect-timeout: 1s
+    read-timeout: 2s

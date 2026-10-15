@@ -1,0 +1,42 @@
+{
+  "mappings": [
+    {
+      "request": { "method": "GET", "url": "/v1/rates/USD/EUR" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "base": "USD", "target": "EUR", "rate": 0.9215 }
+      }
+    },
+    {
+      "request": { "method": "GET", "url": "/v1/rates/USD/UAH" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "base": "USD", "target": "UAH", "rate": 41.25 }
+      }
+    },
+    {
+      "request": { "method": "GET", "url": "/v1/rates/USD/GBP" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "base": "USD", "target": "GBP", "rate": 0.7912 }
+      }
+    },
+    {
+      "request": { "method": "GET", "url": "/v1/rates/USD/JPY" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "base": "USD", "target": "JPY", "rate": 149.8 },
+        "fixedDelayMilliseconds": 5000
+      }
+    },
+    {
+      "priority": 10,
+      "request": { "method": "GET", "urlPathPattern": "/v1/rates/USD/[A-Z]{3}" },
+      "response": { "status": 404 }
+    }
+  ]
+}

@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.3.4'
     id 'io.spring.dependency-management' version '1.1.6'
+    id 'org.barfuin.gradle.jacocolog' version '3.1.0'
 }
 
 group = 'com.cosmocats'
@@ -12,9 +13,21 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+ext {
+    // Minimal line coverage for every source file, checked by jacocoTestCoverageVerification
+    minimumCoveragePerFile = 0.8
+    // Only the main() launcher is excluded, configuration classes are covered by *IT tests
+    filesExcludedFromCoverage = [
+            "**/*MarketplaceApplication.*"
+    ]
+}
+
 repositories {
     mavenCentral()
 }
+
+apply from: "${rootProject.projectDir}/gradle/test.gradle"
+apply from: "${rootProject.projectDir}/gradle/jacoco.gradle"
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -23,4 +36,8 @@ dependencies {
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.wiremock:wiremock-standalone:3.9.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
