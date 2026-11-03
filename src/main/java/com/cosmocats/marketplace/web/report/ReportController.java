@@ -1,6 +1,7 @@
 package com.cosmocats.marketplace.web.report;
 
 import com.cosmocats.marketplace.application.report.ProductReportService;
+import com.cosmocats.marketplace.web.report.dto.PopularProductResponseDto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import java.util.List;
 public class ReportController {
 
     private final ProductReportService productReportService;
+    private final ReportMapper reportMapper;
 
     @GetMapping("/popular-products")
     public List<PopularProductResponseDto> getPopularProducts(
@@ -25,8 +27,7 @@ public class ReportController {
             @Max(value = 100, message = "must be less than or equal to 100")
             int limit) {
         return productReportService.getPopularProducts(limit).stream()
-                .map(product -> new PopularProductResponseDto(product.productId(), product.productName(),
-                        product.totalQuantity(), product.orderCount()))
+                .map(reportMapper::toDto)
                 .toList();
     }
 }

@@ -1,4 +1,4 @@
-package com.cosmocats.marketplace.web.report;
+package com.cosmocats.marketplace.web.report.dto;
 
 import java.util.UUID;
 
