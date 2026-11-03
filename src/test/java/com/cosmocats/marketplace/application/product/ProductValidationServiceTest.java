@@ -13,7 +13,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,12 +23,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * The name check itself (ignoring case, only in the same category, not the product itself)
+ * is a query, it is tested against PostgreSQL in ProductRepositoryIT.
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ProductValidationService")
 class ProductValidationServiceTest {
 
     private static final UUID PRODUCT_ID = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-    private static final UUID OTHER_PRODUCT_ID = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000002");
     private static final UUID CATEGORY_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock
@@ -43,8 +45,8 @@ class ProductValidationServiceTest {
 
     @Test
     void acceptsProductWithExistingCategoryAndFreeName() {
-        when(categoryRepository.existsById(CATEGORY_ID)).thenReturn(true);
-        when(productRepository.findByNameIgnoreCase("Star yarn ball")).thenReturn(Optional.empty());
+        when(categoryRepository.existsByReference(CATEGORY_ID)).thenReturn(true);
+        when(productRepository.existsByNameInCategory(CATEGORY_ID, "Star yarn ball", PRODUCT_ID)).thenReturn(false);
 
         assertThatNoException().isThrownBy(() ->
                 productValidationService.validateBeforeSave(product(PRODUCT_ID, "Star yarn ball")));
@@ -52,40 +54,29 @@ class ProductValidationServiceTest {
 
     @Test
     void rejectsProductWithUnknownCategoryBeforeCheckingName() {
-        when(categoryRepository.existsById(CATEGORY_ID)).thenReturn(false);
+        when(categoryRepository.existsByReference(CATEGORY_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> productValidationService.validateBeforeSave(product(PRODUCT_ID, "Star yarn ball")))
                 .isInstanceOf(CategoryNotFoundException.class)
                 .hasMessage("Category with id '%s' does not exist.", CATEGORY_ID);
-        verify(productRepository, never()).findByNameIgnoreCase(any());
+        verify(productRepository, never()).existsByNameInCategory(any(), any(), any());
     }
 
     @Test
-    void rejectsNameThatBelongsToAnotherProduct() {
-        when(categoryRepository.existsById(CATEGORY_ID)).thenReturn(true);
-        when(productRepository.findByNameIgnoreCase("galaxy COSMIC milk"))
-                .thenReturn(Optional.of(product(OTHER_PRODUCT_ID, "Galaxy cosmic milk")));
+    void rejectsNameThatAnotherProductOfCategoryHas() {
+        when(categoryRepository.existsByReference(CATEGORY_ID)).thenReturn(true);
+        when(productRepository.existsByNameInCategory(CATEGORY_ID, "galaxy COSMIC milk", PRODUCT_ID)).thenReturn(true);
 
         assertThatThrownBy(() -> productValidationService.validateBeforeSave(product(PRODUCT_ID, "galaxy COSMIC milk")))
                 .isInstanceOf(ProductNameAlreadyExistsException.class)
-                .hasMessage("Product with name 'galaxy COSMIC milk' already exists.");
-    }
-
-    @Test
-    void allowsProductToKeepItsOwnNameOnUpdate() {
-        when(categoryRepository.existsById(CATEGORY_ID)).thenReturn(true);
-        when(productRepository.findByNameIgnoreCase("Star yarn ball"))
-                .thenReturn(Optional.of(product(PRODUCT_ID, "Star yarn ball")));
-
-        assertThatNoException().isThrownBy(() ->
-                productValidationService.validateBeforeSave(product(PRODUCT_ID, "Star yarn ball")));
+                .hasMessage("Product with name 'galaxy COSMIC milk' already exists in this category.");
     }
 
     @Test
     void categoryExistsDelegatesToCategoryRepository() {
         UUID unknownCategoryId = UUID.randomUUID();
-        when(categoryRepository.existsById(CATEGORY_ID)).thenReturn(true);
-        when(categoryRepository.existsById(unknownCategoryId)).thenReturn(false);
+        when(categoryRepository.existsByReference(CATEGORY_ID)).thenReturn(true);
+        when(categoryRepository.existsByReference(unknownCategoryId)).thenReturn(false);
 
         assertThat(productValidationService.categoryExists(CATEGORY_ID)).isTrue();
         assertThat(productValidationService.categoryExists(unknownCategoryId)).isFalse();

@@ -20,17 +20,18 @@ class OrderTest {
     private static final Instant CREATED_AT = Instant.parse("2026-10-14T10:15:30Z");
 
     @Test
-    void placeFromCartCopiesItemsWithPricesAndStartsAsCreated() {
+    void placeFromCartUsesCartIdCopiesItemsWithPricesAndStartsAsCreated() {
         UUID catnipId = UUID.randomUUID();
         UUID helmetId = UUID.randomUUID();
-        Cart cart = new Cart(UUID.randomUUID(), CUSTOMER_ID, List.of(
+        UUID cartId = UUID.randomUUID();
+        Cart cart = new Cart(cartId, CUSTOMER_ID, List.of(
                 new CartItem(catnipId, 2, new BigDecimal("7.25")),
                 new CartItem(helmetId, 1, new BigDecimal("39.00"))
         ));
 
         Order order = Order.placeFrom(cart, CREATED_AT);
 
-        assertThat(order.id()).isNotNull();
+        assertThat(order.cartId()).isEqualTo(cartId);
         assertThat(order.customerId()).isEqualTo(CUSTOMER_ID);
         assertThat(order.status()).isEqualTo(OrderStatus.CREATED);
         assertThat(order.createdAt()).isEqualTo(CREATED_AT);
@@ -61,7 +62,7 @@ class OrderTest {
         List<OrderItem> items = List.of(new OrderItem(UUID.randomUUID(), 1, BigDecimal.ONE));
 
         assertThatThrownBy(() -> new Order(null, CUSTOMER_ID, items, OrderStatus.PAID, CREATED_AT))
-                .hasMessage("id must not be null");
+                .hasMessage("cartId must not be null");
         assertThatThrownBy(() -> new Order(UUID.randomUUID(), null, items, OrderStatus.PAID, CREATED_AT))
                 .hasMessage("customerId must not be null");
         assertThatThrownBy(() -> new Order(UUID.randomUUID(), CUSTOMER_ID, items, null, CREATED_AT))

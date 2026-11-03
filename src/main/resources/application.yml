@@ -5,6 +5,24 @@ spring:
     deserialization:
       # By default Jackson silently truncates 2.7 to 2 for integer fields like stockQuantity
       accept-float-as-int: false
+  # Local database: docker compose -f scripts/docker/compose.yaml up -d
+  # Other environments set DB_URL, DB_USERNAME and DB_PASSWORD
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cosmo_cats}
+    username: ${DB_USERNAME:cosmo_cats}
+    password: ${DB_PASSWORD:cosmo_cats}
+  jpa:
+    # The schema belongs to Liquibase, Hibernate only checks that the entities match it
+    hibernate:
+      ddl-auto: validate
+    # No lazy loading in controllers: the services return domain objects mapped inside a transaction
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
 
 server:
   port: 8080

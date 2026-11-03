@@ -1,0 +1,109 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-category-table
+      author: llllenah
+      changes:
+        # incrementBy matches allocationSize = 50 of @SequenceGenerator:
+        # Hibernate reserves 50 ids with one call to the sequence
+        - createSequence:
+            sequenceName: category_id_seq
+            startValue: 1
+            incrementBy: 50
+        - createTable:
+            tableName: category
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_category
+              # Public id used in the API, the numeric id never leaves the database layer
+              - column:
+                  name: reference
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_category_reference
+              - column:
+                  name: name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_category_name
+
+  - changeSet:
+      id: 001-create-product-table
+      author: llllenah
+      changes:
+        - createSequence:
+            sequenceName: product_id_seq
+            startValue: 1
+            incrementBy: 50
+        - createTable:
+            tableName: product
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_product
+              - column:
+                  name: reference
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_product_reference
+              - column:
+                  name: name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: VARCHAR(500)
+              # Same limits as ProductRequestDto: up to 10 integer digits and 2 decimal places
+              - column:
+                  name: price
+                  type: NUMERIC(12, 2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: stock_quantity
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: category_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_product_category
+                    references: category(id)
+              # Optimistic locking: two orders must not decrease the same stock at the same time
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        # PostgreSQL does not create indexes for foreign keys automatically
+        - createIndex:
+            indexName: idx_product_category_id
+            tableName: product
+            columns:
+              - column:
+                  name: category_id
+        - sql:
+            sql: >
+              ALTER TABLE product ADD CONSTRAINT ck_product_price_positive CHECK (price > 0);
+              ALTER TABLE product ADD CONSTRAINT ck_product_stock_not_negative CHECK (stock_quantity >= 0);
+      rollback:
+        - dropTable:
+            tableName: product
+        - dropSequence:
+            sequenceName: product_id_seq

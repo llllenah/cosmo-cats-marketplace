@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-cosmo-cat-email-unique
+      author: llllenah
+      changes:
+        - addUniqueConstraint:
+            tableName: cosmo_cat
+            columnNames: email
+            constraintName: uq_cosmo_cat_email

@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Runs whole scenarios through all layers: controller, validation, services and in-memory repositories.
+ * Runs whole scenarios through all layers: controller, validation, services and PostgreSQL.
  */
 @DisplayName("Product API end-to-end")
 class ProductApiIT extends AbstractIT {

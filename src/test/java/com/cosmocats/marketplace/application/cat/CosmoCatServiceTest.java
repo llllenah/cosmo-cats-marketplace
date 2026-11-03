@@ -6,6 +6,8 @@ import com.cosmocats.marketplace.featuretoggle.FeatureToggleAspect;
 import com.cosmocats.marketplace.featuretoggle.FeatureToggleConfig;
 import com.cosmocats.marketplace.featuretoggle.FeatureToggleService;
 import com.cosmocats.marketplace.infrastructure.persistence.CosmoCatRepository;
+import com.cosmocats.marketplace.infrastructure.persistence.EntityMapper;
+import com.cosmocats.marketplace.infrastructure.persistence.entity.CosmoCatEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.cosmocats.marketplace.infrastructure.persistence.TestEntities.cosmoCat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -35,24 +38,28 @@ import static org.mockito.Mockito.when;
 @DisplayName("CosmoCatService behind the cosmoCats feature toggle")
 class CosmoCatServiceTest {
 
-    private static final List<CosmoCat> COSMO_CATS = List.of(
-            new CosmoCat(UUID.randomUUID(), "Luna", "Moon"),
-            new CosmoCat(UUID.randomUUID(), "Orion", "Mars"));
+    private static final UUID LUNA_ID = UUID.randomUUID();
+    private static final UUID ORION_ID = UUID.randomUUID();
+    private static final List<CosmoCatEntity> COSMO_CATS = List.of(
+            cosmoCat(LUNA_ID, "Luna", "luna@moon.space"),
+            cosmoCat(ORION_ID, "Orion", "orion@mars.space"));
 
     private final CosmoCatRepository cosmoCatRepository = mock(CosmoCatRepository.class);
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(AopAutoConfiguration.class))
             .withUserConfiguration(FeatureToggleConfig.class, FeatureToggleService.class,
-                    FeatureToggleAspect.class, CosmoCatService.class)
+                    FeatureToggleAspect.class, CosmoCatService.class, EntityMapper.class)
             .withBean(CosmoCatRepository.class, () -> cosmoCatRepository);
 
     @Test
     void returnsCosmoCatsWhenFeatureIsEnabled() {
-        when(cosmoCatRepository.findAll()).thenReturn(COSMO_CATS);
+        when(cosmoCatRepository.findAllByOrderByNameAsc()).thenReturn(COSMO_CATS);
 
         contextRunner.withPropertyValues("feature.cosmoCats.enabled=true").run(context ->
-                assertThat(context.getBean(CosmoCatService.class).getCosmoCats()).isEqualTo(COSMO_CATS));
+                assertThat(context.getBean(CosmoCatService.class).getCosmoCats()).containsExactly(
+                        new CosmoCat(LUNA_ID, "Luna", "luna@moon.space", "Moon"),
+                        new CosmoCat(ORION_ID, "Orion", "orion@mars.space", "Moon")));
     }
 
     @Test
@@ -80,7 +87,7 @@ class CosmoCatServiceTest {
             "feature.cosmocats.enabled=true"
     })
     void acceptsAllUsualSpellingsOfTheFlag(String property) {
-        when(cosmoCatRepository.findAll()).thenReturn(COSMO_CATS);
+        when(cosmoCatRepository.findAllByOrderByNameAsc()).thenReturn(COSMO_CATS);
 
         contextRunner.withPropertyValues(property).run(context ->
                 assertThat(context.getBean(CosmoCatService.class).getCosmoCats()).hasSize(2));

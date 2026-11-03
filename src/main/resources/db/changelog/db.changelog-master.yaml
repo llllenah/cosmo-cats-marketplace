@@ -1,0 +1,31 @@
+# Database versions of the marketplace. Every change goes into a new file in changes/,
+# files that are already applied are never edited (Liquibase checks their checksums).
+# The tags mark released versions of the schema, so it can be rolled back to one of them.
+databaseChangeLog:
+  - include:
+      file: changes/001-create-catalog-tables.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/002-create-cosmo-cat-and-order-tables.yaml
+      relativeToChangelogFile: true
+  - changeSet:
+      id: tag-1.0.0
+      author: llllenah
+      changes:
+        - tagDatabase:
+            tag: 1.0.0
+  - include:
+      file: changes/003-product-name-unique-in-category.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/004-cosmo-cat-email-unique.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/005-seed-catalog-and-cosmo-cats.yaml
+      relativeToChangelogFile: true
+  - changeSet:
+      id: tag-1.1.0
+      author: llllenah
+      changes:
+        - tagDatabase:
+            tag: 1.1.0

@@ -1,0 +1,165 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-cosmo-cat-table
+      author: llllenah
+      changes:
+        - createSequence:
+            sequenceName: cosmo_cat_id_seq
+            startValue: 1
+            incrementBy: 50
+        - createTable:
+            tableName: cosmo_cat
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_cosmo_cat
+              - column:
+                  name: reference
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_cosmo_cat_reference
+              - column:
+                  name: name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: home_planet
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 002-create-orders-table
+      author: llllenah
+      changes:
+        - createSequence:
+            sequenceName: orders_id_seq
+            startValue: 1
+            incrementBy: 50
+        # ORDER is a reserved word in SQL, so the table is called orders
+        - createTable:
+            tableName: orders
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_orders
+              # Natural id: one cart can be checked out only once
+              - column:
+                  name: cart_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_orders_cart_id
+              - column:
+                  name: cosmo_cat_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_orders_cosmo_cat
+                    references: cosmo_cat(id)
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: idx_orders_cosmo_cat_id
+            tableName: orders
+            columns:
+              - column:
+                  name: cosmo_cat_id
+        - sql:
+            sql: >
+              ALTER TABLE orders ADD CONSTRAINT ck_orders_status
+              CHECK (status IN ('CREATED', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED'));
+      rollback:
+        - dropTable:
+            tableName: orders
+        - dropSequence:
+            sequenceName: orders_id_seq
+
+  - changeSet:
+      id: 002-create-order-item-table
+      author: llllenah
+      changes:
+        - createSequence:
+            sequenceName: order_item_id_seq
+            startValue: 1
+            incrementBy: 50
+        # unit_price is the price at the moment of ordering, it does not depend on the current
+        # product price. The order total is not stored, it is always calculated from the items.
+        - createTable:
+            tableName: order_item
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_order_item
+              - column:
+                  name: order_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_order_item_order
+                    references: orders(id)
+                    deleteCascade: true
+              - column:
+                  name: product_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_order_item_product
+                    references: product(id)
+              - column:
+                  name: quantity
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unit_price
+                  type: NUMERIC(12, 2)
+                  constraints:
+                    nullable: false
+        # One row per product in an order. order_id goes first, so the same index
+        # is used to load the items of an order.
+        - addUniqueConstraint:
+            tableName: order_item
+            columnNames: order_id, product_id
+            constraintName: uq_order_item_order_product
+        - createIndex:
+            indexName: idx_order_item_product_id
+            tableName: order_item
+            columns:
+              - column:
+                  name: product_id
+        - sql:
+            sql: >
+              ALTER TABLE order_item ADD CONSTRAINT ck_order_item_quantity_positive CHECK (quantity > 0);
+              ALTER TABLE order_item ADD CONSTRAINT ck_order_item_unit_price_positive CHECK (unit_price > 0);
+      rollback:
+        - dropTable:
+            tableName: order_item
+        - dropSequence:
+            sequenceName: order_item_id_seq

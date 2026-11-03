@@ -1,34 +1,54 @@
 package com.cosmocats.marketplace.infrastructure.persistence;
 
-import com.cosmocats.marketplace.application.product.PageCursor;
-import com.cosmocats.marketplace.domain.product.Product;
+import com.cosmocats.marketplace.infrastructure.persistence.entity.ProductEntity;
+import org.springframework.data.domain.Limit;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface ProductRepository {
+public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
 
-    Product save(Product product);
-
-    Optional<Product> findById(UUID id);
-
-    Optional<Product> findByNameIgnoreCase(String name);
+    @EntityGraph(attributePaths = "category")
+    Optional<ProductEntity> findByReference(UUID reference);
 
     /**
-     * Returns up to {@code limit} products sorted by name and id, starting right after the cursor.
-     * A null cursor means the first page.
+     * Checks if another product of the category already has this name, ignoring case.
+     * lower() instead of IgnoreCase in the method name: Spring Data would use upper(),
+     * and the index idx_product_name_lower is built on lower(name).
      */
-    List<Product> findPageAfter(PageCursor cursor, int limit);
+    @Query("""
+            select case when count(p) > 0 then true else false end from ProductEntity p
+            where p.category.reference = :categoryReference
+              and lower(p.name) = lower(:name)
+              and p.reference <> :excludedReference
+            """)
+    boolean existsByNameInCategory(UUID categoryReference, String name, UUID excludedReference);
 
     /**
-     * Returns products of the category sorted by name and id.
+     * First page of keyset pagination: products sorted by name (ignoring case) and reference.
      */
-    List<Product> findByCategoryId(UUID categoryId);
+    @Query("""
+            select p from ProductEntity p join fetch p.category
+            order by lower(p.name), p.reference
+            """)
+    List<ProductEntity> findFirstPage(Limit limit);
 
-    long count();
+    /**
+     * Next page of keyset pagination: products that go after the given name and reference
+     * in the same order as {@link #findFirstPage(Limit)}.
+     */
+    @Query("""
+            select p from ProductEntity p join fetch p.category
+            where lower(p.name) > lower(:name)
+               or (lower(p.name) = lower(:name) and p.reference > :reference)
+            order by lower(p.name), p.reference
+            """)
+    List<ProductEntity> findPageAfter(String name, UUID reference, Limit limit);
 
-    boolean existsById(UUID id);
-
-    void deleteById(UUID id);
+    @EntityGraph(attributePaths = "category")
+    List<ProductEntity> findByCategoryReferenceOrderByNameAscReferenceAsc(UUID categoryReference);
 }

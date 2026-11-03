@@ -50,9 +50,10 @@ class DomainRecordsTest {
 
     @Test
     void cosmoCatRequiresAllFields() {
-        assertThat(new CosmoCat(CATEGORY_ID, "Luna", "Moon").homePlanet()).isEqualTo("Moon");
-        assertThatThrownBy(() -> new CosmoCat(null, "Luna", "Moon")).hasMessage("id must not be null");
-        assertThatThrownBy(() -> new CosmoCat(CATEGORY_ID, null, "Moon")).hasMessage("name must not be null");
-        assertThatThrownBy(() -> new CosmoCat(CATEGORY_ID, "Luna", null)).hasMessage("homePlanet must not be null");
+        assertThat(new CosmoCat(CATEGORY_ID, "Luna", "luna@moon.space", "Moon").homePlanet()).isEqualTo("Moon");
+        assertThatThrownBy(() -> new CosmoCat(null, "Luna", "luna@moon.space", "Moon")).hasMessage("id must not be null");
+        assertThatThrownBy(() -> new CosmoCat(CATEGORY_ID, null, "luna@moon.space", "Moon")).hasMessage("name must not be null");
+        assertThatThrownBy(() -> new CosmoCat(CATEGORY_ID, "Luna", null, "Moon")).hasMessage("email must not be null");
+        assertThatThrownBy(() -> new CosmoCat(CATEGORY_ID, "Luna", "luna@moon.space", null)).hasMessage("homePlanet must not be null");
     }
 }

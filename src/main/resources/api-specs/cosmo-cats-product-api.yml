@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Cosmo Cats Intergalactic Marketplace — Product API
+  title: Cosmo Cats Intergalactic Marketplace API
   description: |
-    CRUD API for products of the Cosmo Cats marketplace, prices in other currencies
-    and endpoints behind feature toggles.
+    CRUD API for products of the Cosmo Cats marketplace, prices in other currencies,
+    orders, reports and endpoints behind feature toggles.
     All errors follow RFC 9457 (Problem Details for HTTP APIs) and are returned
     with the `application/problem+json` media type.
   version: 1.0.0
@@ -13,6 +13,10 @@ servers:
 tags:
   - name: Products
     description: Operations with marketplace products
+  - name: Orders
+    description: Checkout of carts. An order is found by its cart id (natural id of the order).
+  - name: Reports
+    description: Reports for the Intergalactic committee
   - name: Feature toggled
     description: |
       Endpoints behind feature toggles (`feature.<key>.enabled` in the configuration).
@@ -180,6 +184,18 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: The product is part of existing orders, orders keep the products they contain
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://cosmo-cats.market/errors/product-in-use
+                title: Product is used in orders
+                status: 409
+                detail: Product 'aaaaaaaa-0000-0000-0000-000000000001' is part of existing orders and cannot be deleted.
+                instance: /api/v1/products/aaaaaaaa-0000-0000-0000-000000000001
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -266,6 +282,112 @@ paths:
                   $ref: '#/components/schemas/ProductResponse'
         '404':
           $ref: '#/components/responses/FeatureNotAvailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/orders:
+    post:
+      tags: [Orders]
+      operationId: placeOrder
+      summary: Check out a cart
+      description: |
+        Creates an order and takes the ordered quantities from the product stock in one transaction.
+        If one item cannot be ordered, nothing is saved. Unit prices are taken from the catalog.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceOrderRequest'
+      responses:
+        '201':
+          description: Order placed
+          headers:
+            Location:
+              description: URL of the order
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/OrderConflict'
+        '422':
+          $ref: '#/components/responses/OrderReferenceNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/orders/{cartId}:
+    parameters:
+      - name: cartId
+        in: path
+        required: true
+        description: Id of the checked out cart, the natural id of the order
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Orders]
+      operationId: getOrder
+      summary: Get an order by cart id
+      responses:
+        '200':
+          description: The order with its items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: No order for this cart
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://cosmo-cats.market/errors/order-not-found
+                title: Order not found
+                status: 404
+                detail: Order for cart 'dddddddd-0000-0000-0000-000000000001' was not found.
+                instance: /api/v1/orders/dddddddd-0000-0000-0000-000000000001
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/reports/popular-products:
+    get:
+      tags: [Reports]
+      operationId: getPopularProducts
+      summary: Products that are bought most often
+      description: |
+        Products sorted by the total ordered quantity (then by the number of orders and by name).
+        Cancelled orders are not counted.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: How many products to return
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: The most popular products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PopularProduct'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -405,6 +527,114 @@ components:
           type: string
           example: Moon
 
+    PlaceOrderRequest:
+      type: object
+      required: [cartId, customerId, items]
+      properties:
+        cartId:
+          type: string
+          format: uuid
+          description: Id of the cart. A cart can be checked out only once.
+          example: dddddddd-0000-0000-0000-000000000001
+        customerId:
+          type: string
+          format: uuid
+          description: Id of an existing cosmo cat.
+          example: cccccccc-0000-0000-0000-000000000001
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          description: Each product can be listed only once.
+          items:
+            $ref: '#/components/schemas/OrderItemRequest'
+
+    OrderItemRequest:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: string
+          format: uuid
+          example: aaaaaaaa-0000-0000-0000-000000000002
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1000
+          example: 2
+
+    OrderResponse:
+      type: object
+      required: [cartId, customerId, status, createdAt, items, totalPrice]
+      properties:
+        cartId:
+          type: string
+          format: uuid
+          example: dddddddd-0000-0000-0000-000000000001
+        customerId:
+          type: string
+          format: uuid
+          example: cccccccc-0000-0000-0000-000000000001
+        status:
+          type: string
+          enum: [CREATED, PAID, SHIPPED, DELIVERED, CANCELLED]
+          example: CREATED
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-11-03T12:00:00Z'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+        totalPrice:
+          type: number
+          description: Sum of the item subtotals, calculated and not stored.
+          example: 9.98
+
+    OrderItemResponse:
+      type: object
+      required: [productId, quantity, unitPrice, subtotal]
+      properties:
+        productId:
+          type: string
+          format: uuid
+          example: aaaaaaaa-0000-0000-0000-000000000002
+        quantity:
+          type: integer
+          format: int32
+          example: 2
+        unitPrice:
+          type: number
+          description: Price at the moment of ordering.
+          example: 4.99
+        subtotal:
+          type: number
+          example: 9.98
+
+    PopularProduct:
+      type: object
+      required: [productId, productName, totalQuantity, orderCount]
+      properties:
+        productId:
+          type: string
+          format: uuid
+          example: aaaaaaaa-0000-0000-0000-000000000002
+        productName:
+          type: string
+          example: Galaxy cosmic milk
+        totalQuantity:
+          type: integer
+          format: int64
+          description: Ordered items in total.
+          example: 42
+        orderCount:
+          type: integer
+          format: int64
+          description: Number of orders with this product.
+          example: 17
+
     ProblemDetail:
       type: object
       description: RFC 9457 problem details object.
@@ -482,7 +712,9 @@ components:
             detail: Product with id 'aaaaaaaa-0000-0000-0000-000000000099' was not found.
             instance: /api/v1/products/aaaaaaaa-0000-0000-0000-000000000099
     Conflict:
-      description: Product with the same name already exists
+      description: |
+        Product with the same name (ignoring case) already exists in the category,
+        or another request saved conflicting data at the same moment (type data-conflict).
       content:
         application/problem+json:
           schema:
@@ -491,7 +723,7 @@ components:
             type: https://cosmo-cats.market/errors/product-already-exists
             title: Product already exists
             status: 409
-            detail: Product with name 'Galaxy cosmic milk' already exists.
+            detail: Product with name 'Galaxy cosmic milk' already exists in this category.
             instance: /api/v1/products
     UnprocessableEntity:
       description: Referenced category does not exist
@@ -543,6 +775,33 @@ components:
             status: 404
             detail: Feature 'kittyProducts' is not available.
             instance: /api/v1/kitty-products
+    OrderConflict:
+      description: |
+        The cart is already checked out (order-already-exists), a product does not have enough
+        items in stock (insufficient-stock) or another request changed the same product at the
+        same moment (concurrent-update).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/insufficient-stock
+            title: Not enough items in stock
+            status: 409
+            detail: Product 'aaaaaaaa-0000-0000-0000-000000000004' has only 10 items in stock, 11 requested.
+            instance: /api/v1/orders
+    OrderReferenceNotFound:
+      description: The cosmo cat or one of the products from the request does not exist
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/order-reference-not-found
+            title: Referenced data not found
+            status: 422
+            detail: Cosmo cat with id 'cccccccc-0000-0000-0000-000000000099' does not exist.
+            instance: /api/v1/orders
     InternalError:
       description: Unexpected server error. Internal details are never exposed.
       content:

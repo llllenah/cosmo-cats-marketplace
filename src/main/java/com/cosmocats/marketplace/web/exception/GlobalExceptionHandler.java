@@ -1,7 +1,13 @@
 package com.cosmocats.marketplace.web.exception;
 
 import com.cosmocats.marketplace.application.exception.CategoryNotFoundException;
+import com.cosmocats.marketplace.application.exception.CosmoCatNotFoundException;
 import com.cosmocats.marketplace.application.exception.ExchangeRateUnavailableException;
+import com.cosmocats.marketplace.application.exception.InsufficientStockException;
+import com.cosmocats.marketplace.application.exception.OrderAlreadyExistsException;
+import com.cosmocats.marketplace.application.exception.OrderNotFoundException;
+import com.cosmocats.marketplace.application.exception.OrderedProductNotFoundException;
+import com.cosmocats.marketplace.application.exception.ProductInUseException;
 import com.cosmocats.marketplace.application.exception.ProductNameAlreadyExistsException;
 import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
 import com.cosmocats.marketplace.application.exception.ProductValidationException;
@@ -12,6 +18,8 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -144,6 +152,54 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleFeatureNotAvailable(FeatureNotAvailableException ex, HttpServletRequest request) {
         return problem(HttpStatus.NOT_FOUND, "feature-not-available", "Feature not available",
                 ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(ProductInUseException.class)
+    public ProblemDetail handleProductInUse(ProductInUseException ex, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "product-in-use", "Product is used in orders",
+                ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ProblemDetail handleOrderNotFound(OrderNotFoundException ex, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "order-not-found", "Order not found",
+                ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(OrderAlreadyExistsException.class)
+    public ProblemDetail handleOrderAlreadyExists(OrderAlreadyExistsException ex, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "order-already-exists", "Order already exists",
+                ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    public ProblemDetail handleInsufficientStock(InsufficientStockException ex, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "insufficient-stock", "Not enough items in stock",
+                ex.getMessage(), request.getRequestURI());
+    }
+
+    // Unknown ids in the request body: the URL is fine, the content refers to missing data
+    @ExceptionHandler({CosmoCatNotFoundException.class, OrderedProductNotFoundException.class})
+    public ProblemDetail handleMissingOrderReference(RuntimeException ex, HttpServletRequest request) {
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY, "order-reference-not-found", "Referenced data not found",
+                ex.getMessage(), request.getRequestURI());
+    }
+
+    // Another request changed the same product (e.g. its stock) between our read and write
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ProblemDetail handleConcurrentUpdate(OptimisticLockingFailureException ex, HttpServletRequest request) {
+        log.info("Concurrent update of {}", request.getRequestURI(), ex);
+        return problem(HttpStatus.CONFLICT, "concurrent-update", "Concurrent update",
+                "The data was changed by another request. Please try again.", request.getRequestURI());
+    }
+
+    // A database constraint caught what the service checks missed, e.g. two requests creating
+    // the same product at the same moment. The constraint details stay in the log.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
+        log.warn("Database constraint violated by {} {}", request.getMethod(), request.getRequestURI(), ex);
+        return problem(HttpStatus.CONFLICT, "data-conflict", "Data conflict",
+                "The request conflicts with existing data.", request.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)
