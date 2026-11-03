@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -134,6 +135,7 @@ class OrderControllerTest {
                     Arguments.of(new OrderAlreadyExistsException(CART_ID), 409, "order-already-exists"),
                     Arguments.of(new InsufficientStockException(MILK_ID, 1, 2), 409, "insufficient-stock"),
                     Arguments.of(new ObjectOptimisticLockingFailureException("ProductEntity", 1L), 409, "concurrent-update"),
+                    Arguments.of(new CannotAcquireLockException("deadlock detected"), 409, "concurrent-update"),
                     Arguments.of(new DataIntegrityViolationException("uq_orders_cart_id"), 409, "data-conflict"),
                     Arguments.of(new CosmoCatNotFoundException(LUNA_ID), 422, "order-reference-not-found"),
                     Arguments.of(new OrderedProductNotFoundException(MILK_ID), 422, "order-reference-not-found"));
