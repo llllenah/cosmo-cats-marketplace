@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -185,9 +186,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 ex.getMessage(), request.getRequestURI());
     }
 
-    // Another request changed the same product (e.g. its stock) between our read and write
-    @ExceptionHandler(OptimisticLockingFailureException.class)
-    public ProblemDetail handleConcurrentUpdate(OptimisticLockingFailureException ex, HttpServletRequest request) {
+    // Another request changed the same product (e.g. its stock) between our read and write,
+    // or two orders locked the same rows in a different order and PostgreSQL broke the deadlock
+    @ExceptionHandler({OptimisticLockingFailureException.class, PessimisticLockingFailureException.class})
+    public ProblemDetail handleConcurrentUpdate(RuntimeException ex, HttpServletRequest request) {
         log.info("Concurrent update of {}", request.getRequestURI(), ex);
         return problem(HttpStatus.CONFLICT, "concurrent-update", "Concurrent update",
                 "The data was changed by another request. Please try again.", request.getRequestURI());
