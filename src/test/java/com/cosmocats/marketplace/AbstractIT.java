@@ -13,10 +13,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 
 /**
- * Base class for integration tests (*IT): starts the whole application context.
- * The external exchange rate service is replaced by a WireMock server on a random port.
- * The context is recreated for every test class, so in-memory data changed by one class
- * does not leak into another.
+ * Base class for integration tests (*IT): starts the whole application context with
+ * PostgreSQL in Docker (Testcontainers). The external exchange rate service is replaced
+ * by a WireMock server on a random port, so the context is recreated for every test class.
+ * The database is shared by the test classes: tests create their own data with unique names
+ * and do not expect an empty table.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -32,7 +33,8 @@ public abstract class AbstractIT {
     protected MockMvc mockMvc;
 
     @DynamicPropertySource
-    static void exchangeRateServiceProperties(DynamicPropertyRegistry registry) {
+    static void externalServices(DynamicPropertyRegistry registry) {
+        PostgresTestContainer.registerDataSource(registry);
         registry.add("application.exchange-rate-service.base-url", exchangeRateService::baseUrl);
     }
 }

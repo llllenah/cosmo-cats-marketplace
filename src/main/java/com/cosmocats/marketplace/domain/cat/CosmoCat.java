@@ -6,11 +6,12 @@ import java.util.UUID;
 /**
  * A cat customer of the marketplace.
  */
-public record CosmoCat(UUID id, String name, String homePlanet) {
+public record CosmoCat(UUID id, String name, String email, String homePlanet) {
 
     public CosmoCat {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(name, "name must not be null");
+        Objects.requireNonNull(email, "email must not be null");
         Objects.requireNonNull(homePlanet, "homePlanet must not be null");
     }
 }

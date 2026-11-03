@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-product-name-unique-in-category
+      author: llllenah
+      changes:
+        # The application compares product names ignoring case ("Galaxy milk" = "GALAXY MILK"),
+        # so the database checks lower(name). A plain UNIQUE (category_id, name) would let
+        # both spellings in.
+        - createIndex:
+            indexName: uq_product_category_name
+            tableName: product
+            unique: true
+            columns:
+              - column:
+                  name: category_id
+              - column:
+                  name: lower(name)
+                  computed: true
+        # Search by name and keyset pagination use lower(name), an index on name alone
+        # would not be used by these queries
+        - createIndex:
+            indexName: idx_product_name_lower
+            tableName: product
+            columns:
+              - column:
+                  name: lower(name)
+                  computed: true
+              - column:
+                  name: reference

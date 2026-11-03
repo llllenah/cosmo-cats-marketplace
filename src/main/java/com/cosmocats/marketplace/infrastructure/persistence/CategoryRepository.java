@@ -1,16 +1,14 @@
 package com.cosmocats.marketplace.infrastructure.persistence;
 
-import com.cosmocats.marketplace.domain.category.Category;
+import com.cosmocats.marketplace.infrastructure.persistence.entity.CategoryEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface CategoryRepository {
+public interface CategoryRepository extends JpaRepository<CategoryEntity, Long> {
 
-    Optional<Category> findById(UUID id);
+    Optional<CategoryEntity> findByReference(UUID reference);
 
-    List<Category> findAll();
-
-    boolean existsById(UUID id);
+    boolean existsByReference(UUID reference);
 }

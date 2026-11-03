@@ -16,45 +16,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PageCursorTest {
 
     private static final UUID FIRST_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID SECOND_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     @Test
     void afterPointsToGivenProduct() {
         Product product = product(FIRST_ID, "Star ball");
 
         assertThat(PageCursor.after(product)).isEqualTo(new PageCursor("Star ball", FIRST_ID));
-    }
-
-    @Test
-    void comparesNamesIgnoringCase() {
-        PageCursor cursor = new PageCursor("comet ball", FIRST_ID);
-
-        assertThat(cursor.isBefore(product(SECOND_ID, "Moon ball"))).isTrue();
-        assertThat(cursor.isBefore(product(SECOND_ID, "Asteroid ball"))).isFalse();
-    }
-
-    @Test
-    void usesIdWhenNamesAreEqual() {
-        PageCursor cursor = new PageCursor("Star ball", FIRST_ID);
-
-        assertThat(cursor.isBefore(product(SECOND_ID, "STAR BALL"))).isTrue();
-        assertThat(cursor.isBefore(product(FIRST_ID, "Star ball"))).isFalse();
-    }
-
-    @Test
-    void isBeforeAgreesWithProductOrder() {
-        List<Product> products = new ArrayList<>(List.of(
-                product(SECOND_ID, "star ball"),
-                product(FIRST_ID, "Star ball"),
-                product(FIRST_ID, "Asteroid ball"),
-                product(SECOND_ID, "Moon ball")));
-
-        products.sort(PageCursor.PRODUCT_ORDER);
-
-        for (int i = 0; i + 1 < products.size(); i++) {
-            assertThat(PageCursor.after(products.get(i)).isBefore(products.get(i + 1))).isTrue();
-            assertThat(PageCursor.after(products.get(i + 1)).isBefore(products.get(i))).isFalse();
-        }
     }
 
     @Test

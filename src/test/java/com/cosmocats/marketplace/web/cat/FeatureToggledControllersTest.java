@@ -46,7 +46,7 @@ class FeatureToggledControllersTest {
 
     @Test
     void returnsCosmoCats() throws Exception {
-        when(cosmoCatService.getCosmoCats()).thenReturn(List.of(new CosmoCat(LUNA_ID, "Luna", "Moon")));
+        when(cosmoCatService.getCosmoCats()).thenReturn(List.of(new CosmoCat(LUNA_ID, "Luna", "luna@moon.space", "Moon")));
 
         mockMvc.perform(get("/api/v1/cosmo-cats"))
                 .andExpect(status().isOk())

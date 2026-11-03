@@ -5,23 +5,31 @@ Backend маркетплейсу космічних товарів для кот
 - Lab 1: API-контракт, DDD, CRUD для `Product`, обробка помилок за RFC 9457, пагінація.
 - Lab 2: юніт-, контролерні та інтеграційні тести, покриття JaCoCo з перевіркою в CI, ціна в іншій валюті через зовнішній сервіс, застабований WireMock.
 - Lab 2.1 (додаткова): feature toggles на рівні середовища зі Spring AOP.
+- Lab 3: PostgreSQL, схема в 3NF через Liquibase, Spring Data JPA, транзакції, Natural ID для замовлень, звіт з projection, тести з Testcontainers.
 
 ## Стек
 
 - Java 17+
-- Spring Boot 3.3 (Web, Validation, AOP)
+- Spring Boot 3.3 (Web, Validation, AOP, Data JPA)
+- PostgreSQL 16, Liquibase
 - Gradle (wrapper у репозиторії)
 - springdoc-openapi (Swagger UI для перегляду контракту)
-- Тести: JUnit 5, Mockito, AssertJ, MockMvc, WireMock, JaCoCo
+- Тести: JUnit 5, Mockito, AssertJ, MockMvc, WireMock, Testcontainers, JaCoCo
 
 ## Запуск
+
+Потрібна база PostgreSQL. Локально її піднімає Docker Compose, схему й початкові дані створює Liquibase при старті застосунку:
+
+```bash
+docker compose -f scripts/docker/compose.yaml up -d
+```
 
 ```bash
 ./gradlew bootRun          # Linux / macOS / Git Bash
 gradlew.bat bootRun        # Windows cmd / PowerShell
 ```
 
-Застосунок стартує на `http://localhost:8080`.
+Застосунок стартує на `http://localhost:8080`. Підключення до іншої бази задається змінними `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
 
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Контракт: `src/main/resources/api-specs/cosmo-cats-product-api.yml`
@@ -37,10 +45,10 @@ com.cosmocats.marketplace
 │   ├── category      Category
 │   ├── cart          Cart, CartItem
 │   └── order         Order, OrderItem, OrderStatus
-├── application       ProductService, ProductValidationService, ProductPriceService, курсор пагінації, винятки
-├── infrastructure    persistence: репозиторії з mock-даними; exchangerate: HTTP-клієнт сервісу курсів
+├── application       сервіси продуктів, замовлень, звітів і цін, курсор пагінації, винятки
+├── infrastructure    persistence: JPA-сутності, Spring Data репозиторії, projection; exchangerate: HTTP-клієнт сервісу курсів
 ├── featuretoggle     @FeatureToggle, FeatureToggleAspect, FeatureToggleService, конфігурація прапорів
-└── web               REST-контролер, DTO, ProductMapper, пагінація, валідація, обробка помилок
+└── web               REST-контролери, DTO, мапери, пагінація, валідація, обробка помилок
 ```
 
 Рішення:
@@ -64,14 +72,17 @@ com.cosmocats.marketplace
 | GET | `/api/v1/products/{id}/price?currency=EUR` | Ціна продукту в іншій валюті | 200 |
 | GET | `/api/v1/cosmo-cats` | Космо-коти (за прапором `cosmoCats`) | 200 |
 | GET | `/api/v1/kitty-products` | Товари для кошенят (за прапором `kittyProducts`) | 200 |
+| POST | `/api/v1/orders` | Оформити кошик як замовлення | 201 + `Location` |
+| GET | `/api/v1/orders/{cartId}` | Замовлення за id кошика | 200 |
+| GET | `/api/v1/reports/popular-products?limit=10` | Товари, які купують найчастіше | 200 |
 
-Коди помилок: 400 (валідація), 404 (продукт не знайдено), 409 (назва вже зайнята), 422 (категорія не існує або валюту не знає сервіс курсів), 500 (непередбачена помилка без деталей реалізації), 503 (сервіс курсів недоступний).
+Коди помилок: 400 (валідація), 404 (продукт або замовлення не знайдено), 409 (назва вже зайнята в категорії, кошик уже оформлений, не вистачає товару, продукт є в замовленнях, одночасна зміна тих самих даних), 422 (категорія, кіт або продукт із тіла запиту не існує, валюту не знає сервіс курсів), 500 (непередбачена помилка без деталей реалізації), 503 (сервіс курсів недоступний).
 
 ### Валідація `ProductRequestDto`
 
 | Поле | Правила |
 |---|---|
-| `name` | обов'язкове, 3–100 символів, має містити космічне слово в однині або множині (`@CosmicWordCheck`) |
+| `name` | обов'язкове, 3–100 символів, має містити космічне слово в однині або множині (`@CosmicWordCheck`), унікальне в межах категорії без урахування регістру |
 | `description` | необов'язкове, до 500 символів |
 | `price` | обов'язкове, більше 0, не більше 2 знаків після коми |
 | `stockQuantity` | обов'язкове, не менше 0 |
@@ -83,7 +94,7 @@ com.cosmocats.marketplace
 
 ## Приклади
 
-Категорії з mock-даних:
+Категорії з початкових даних (`005-seed-catalog-and-cosmo-cats.yaml`):
 
 | id | Назва |
 |---|---|
@@ -201,6 +212,60 @@ feature:
 
 Тести: `FeatureToggleAspectTest`, `FeatureToggleConfigTest`, `CosmoCatServiceTest` і `KittyProductServiceTest` (маленький Spring-контекст зі справжнім аспектом), `FeatureToggledControllersTest`, `DefaultFeatureTogglesIT` і `SwitchedFeatureTogglesIT` (той самий застосунок з прапорами з `application.yml` і з перевизначеними для середовища).
 
+## База даних (Lab 3)
+
+### Схема
+
+```
+category (id, reference UK, name UK)
+    1 ── * product (id, reference UK, name, description, price, stock_quantity, category_id FK, version)
+                        1 ── * order_item (id, order_id FK, product_id FK, quantity, unit_price)   UK (order_id, product_id)
+cosmo_cat (id, reference UK, name, email UK, home_planet)                          * ── 1
+    1 ── * orders (id, cart_id UK — natural id, cosmo_cat_id FK, status, created_at) 1 ── *
+```
+
+- 3NF: кожна таблиця описує одну сутність, неключові колонки залежать тільки від ключа. Назва категорії зберігається один раз у `category`, а не в кожному продукті. Сума замовлення не зберігається, а рахується з позицій, тому не може розійтися з ними.
+- `order_item.unit_price` — ціна на момент замовлення. Це окремий факт, а не копія `product.price`: зміна ціни в каталозі не змінює старі замовлення.
+- `id` — сурогатні ключі з послідовностей (`*_id_seq`, крок 50, як `allocationSize` у сутностях). Назовні вони не виходять: API працює з UUID (`reference`), а замовлення шукаються за natural id `cart_id`.
+- `product.version` — оптимістичне блокування: два замовлення не можуть одночасно зменшити той самий залишок.
+- CHECK-обмеження дублюють правила застосунку: ціна > 0, залишок ≥ 0, кількість > 0, статус з переліку.
+
+### Liquibase
+
+`src/main/resources/db/changelog/db.changelog-master.yaml` підключає зміни по порядку:
+
+| Файл | Що робить |
+|---|---|
+| `001-create-catalog-tables.yaml` | послідовності, `category`, `product`, FK, індекс на `product.category_id`, CHECK |
+| `002-create-cosmo-cat-and-order-tables.yaml` | `cosmo_cat`, `orders`, `order_item`, FK, індекси, unique `cart_id` |
+| тег `1.0.0` | початкова схема |
+| `003-product-name-unique-in-category.yaml` | unique index `(category_id, lower(name))` і індекс `lower(name)` для пошуку й пагінації |
+| `004-cosmo-cat-email-unique.yaml` | unique constraint на `cosmo_cat.email` |
+| `005-seed-catalog-and-cosmo-cats.yaml` | початкові категорії, продукти й коти (id з `nextval`, щоб не конфліктувати з Hibernate) |
+| тег `1.1.0` | обмеження й дані |
+
+Застосовані файли не редагуються, кожна зміна йде новим файлом. Hibernate працює з `ddl-auto: validate`: він тільки перевіряє, що сутності збігаються зі схемою Liquibase.
+
+### Доступ до даних
+
+- Spring Data репозиторії в `infrastructure/persistence`: `ProductRepository`, `CategoryRepository`, `CosmoCatRepository`, `OrderRepository`. Сервіси працюють із сутностями всередині транзакції й повертають доменні records (`EntityMapper`), сутності не доходять до контролерів (`open-in-view: false`).
+- `@Transactional` на сервісах: читання в `readOnly`-транзакціях, кожен запис — одна транзакція. Оформлення замовлення списує залишки всіх позицій; якщо одна позиція не проходить, відкочується все.
+- Natural ID: `OrderEntity.cartId` позначений `@NaturalId`, `NaturalIdRepository.findByNaturalId` шукає через Hibernate API (`bySimpleNaturalId`). Базовий клас репозиторіїв задано в `JpaConfig`.
+- Keyset-пагінація продуктів — JPQL-запити з `WHERE lower(name) > ...` і `ORDER BY lower(name), reference`.
+- Звіт для Інтергалактичного комітету: `OrderRepository.findPopularProducts` — JPQL з `WHERE status IN`, `GROUP BY`, `ORDER BY sum(quantity) DESC` в interface projection `PopularProductView` (тільки 4 колонки, сутності не завантажуються). Скасовані замовлення не рахуються.
+
+Приклад замовлення:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/orders \
+  -H "Content-Type: application/json" \
+  -d '{"cartId":"dddddddd-0000-0000-0000-000000000001","customerId":"cccccccc-0000-0000-0000-000000000001","items":[{"productId":"aaaaaaaa-0000-0000-0000-000000000002","quantity":2}]}'
+```
+
+```bash
+curl "http://localhost:8080/api/v1/reports/popular-products?limit=5"
+```
+
 ## Тести
 
 ```bash
@@ -210,24 +275,28 @@ feature:
 
 Скрипти `gradle/test.gradle` і `gradle/jacoco.gradle` взяті з репозиторію курсу:
 
-- `test` запускає юніт-тести (`*Test`), `integrationTest` запускає інтеграційні (`*IT`), `test` залежить від `integrationTest`;
+- `test` запускає юніт-тести (`*Test`), `integrationTest` запускає інтеграційні (`*IT`), `test` залежить від `integrationTest`. Інтеграційним тестам потрібен Docker: PostgreSQL піднімає Testcontainers (`PostgresTestContainer`, один контейнер на JVM);
 - `jacocoTestReport` збирає спільний звіт з обох запусків у `build/reports/coverage/index.html` (HTML і CSV);
 - `jacocoTestCoverageVerification` валить збірку, якщо будь-який файл має менше 80% покриття рядків. Виключений тільки клас з `main()`;
 - зведення по тестах пишеться в `build/reports/tests/test-summary.md`.
 
-Поточне покриття: 100% рядків, 98.8% гілок (243 тести).
+Поточне покриття: 100% рядків, 98.8% гілок (239 юніт-тестів і 72 інтеграційні).
 
 | Рівень | Класи | Що перевіряють |
 |---|---|---|
 | Сервіси (Mockito) | `ProductServiceImplTest`, `ProductValidationServiceTest`, `ProductPriceServiceTest` | кожен метод сервісів: генерація id, 404, 409, 422, пагінація з курсором, конвертація й округлення, що репозиторій/клієнт не викликається після помилки |
 | Контролер (`@WebMvcTest`) | `ProductControllerTest` | валідація тіла, query- і path-параметрів, позитивні межові значення і негативні сценарії, неправильні типи, битий JSON, 404/409/422/500/503 у форматі problem details |
-| Юніт | `PageTokenCodecTest`, `CosmicWordValidatorTest`, `ProductMapperTest`, `GlobalExceptionHandlerTest`, доменні тести, `InMemoryRepositoriesTest` | кодування токена сторінки, космічні слова, маппінг, інваріанти доменних records, сортування й потокобезпечність сховища |
-| Інтеграційні (`@SpringBootTest`) | `ProductApiIT`, `ProductPriceIT`, `ApiContractIT` | повний CRUD через усі шари, прохід усіх сторінок токенами, сервіс курсів через WireMock (стаби, затримки, обриви з'єднання), відповідність ендпоінтів OpenAPI-контракту |
+| Сервіси замовлень і звітів (Mockito) | `OrderServiceTest`, `ProductReportServiceTest` | ціни з каталогу, списання залишку, 409/422, статуси для звіту |
+| Контролери замовлень і звітів (`@WebMvcTest`) | `OrderControllerTest`, `ReportControllerTest` | валідація замовлення (той самий продукт двічі, кількість, порожній список), коди помилок, межі `limit` |
+| Юніт | `PageTokenCodecTest`, `CosmicWordValidatorTest`, `ProductMapperTest`, `EntityMapperTest`, `EachProductOnceValidatorTest`, `GlobalExceptionHandlerTest`, доменні тести | кодування токена сторінки, космічні слова, маппінг, інваріанти доменних records |
+| Репозиторії (`@DataJpaTest` + Testcontainers) | `ProductRepositoryIT`, `CategoryRepositoryIT`, `CosmoCatRepositoryIT`, `OrderRepositoryIT`, `LiquibaseMigrationIT` | CRUD кожної сутності, natural id, keyset-сторінки, звіт з projection, оптимістичне блокування, change sets і теги Liquibase, індекси, послідовності, unique і CHECK обмеження |
+| Інтеграційні (`@SpringBootTest` + Testcontainers) | `ProductApiIT`, `ProductPriceIT`, `ApiContractIT`, `OrderApiIT`, `ConcurrentRequestsIT`, тести прапорів | повний CRUD через усі шари, відкат транзакції замовлення, одночасні запити (409 замість 500), сервіс курсів через WireMock, відповідність ендпоінтів OpenAPI-контракту |
 
 CI: `.github/workflows/pull_request.yml` запускає `./gradlew build` на кожен pull request, додає зведення тестів і покриття в summary запуску і зберігає HTML-звіт покриття як артефакт `test-coverage-report`.
 
 ## Обмеження
 
-- Дані зберігаються в пам'яті й скидаються після перезапуску. База даних буде в Lab 3.
-- Перевірка унікальності назви не атомарна. У Lab 3 її замінить unique constraint у БД.
+- Категорій і котів можна змінювати тільки міграціями, REST API для них немає.
+- Перевірки в сервісах (назва, залишок) не атомарні. Одночасні запити ловлять обмеження БД і `@Version`, клієнт отримує 409 і має повторити запит сам.
+- `PUT /products/{id}` перезаписує залишок цілком, а версію клієнт не передає. Якщо між GET і PUT хтось оформив замовлення, PUT поверне старий залишок. Виправлення — `ETag`/`If-Match` з `version`, це поза межами лаби.
 - Курси валют не кешуються, повторних спроб і circuit breaker для сервісу курсів немає: при збої одразу 503.

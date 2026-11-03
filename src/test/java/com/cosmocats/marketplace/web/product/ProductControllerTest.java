@@ -228,7 +228,7 @@ class ProductControllerTest {
                     .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.type").value(ERRORS_BASE_URL + "product-already-exists"))
                     .andExpect(jsonPath("$.title").value("Product already exists"))
-                    .andExpect(jsonPath("$.detail").value("Product with name 'Moon dust catnip' already exists."))
+                    .andExpect(jsonPath("$.detail").value("Product with name 'Moon dust catnip' already exists in this category."))
                     .andExpect(jsonPath("$.instance").value(PRODUCTS_URL));
         }
 

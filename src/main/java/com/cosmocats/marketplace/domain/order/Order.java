@@ -8,8 +8,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Order placed from a cart. The cart id is the natural id of the order: one cart is checked out once.
+ */
 public record Order(
-        UUID id,
+        UUID cartId,
         UUID customerId,
         List<OrderItem> items,
         OrderStatus status,
@@ -17,7 +20,7 @@ public record Order(
 ) {
 
     public Order {
-        Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(cartId, "cartId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
@@ -34,7 +37,7 @@ public record Order(
         List<OrderItem> orderItems = cart.items().stream()
                 .map(item -> new OrderItem(item.productId(), item.quantity(), item.unitPrice()))
                 .toList();
-        return new Order(UUID.randomUUID(), cart.customerId(), orderItems, OrderStatus.CREATED, createdAt);
+        return new Order(cart.id(), cart.customerId(), orderItems, OrderStatus.CREATED, createdAt);
     }
 
     public BigDecimal totalPrice() {

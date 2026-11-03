@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Runs whole scenarios through all layers: controller, validation, services and in-memory repositories.
+ * Runs whole scenarios through all layers: controller, validation, services and PostgreSQL.
  */
 @DisplayName("Product API end-to-end")
 class ProductApiIT extends AbstractIT {
@@ -97,8 +97,10 @@ class ProductApiIT extends AbstractIT {
             page.get("content").forEach(product -> names.add(product.get("name").asText()));
             pageToken = page.get("page").get("nextPageToken").isNull() ? null : page.get("page").get("nextPageToken").asText();
             requests++;
-        } while (pageToken != null && requests < 20);
+        } while (pageToken != null && requests < 500);
 
+        // Other test classes add products to the same database, the walk must still reach the last page
+        assertThat(pageToken).isNull();
         assertThat(names)
                 .contains("Anti-gravity star yarn ball", "Comet tail scratching post",
                         "Galaxy cosmic milk", "Nebula nap capsule")

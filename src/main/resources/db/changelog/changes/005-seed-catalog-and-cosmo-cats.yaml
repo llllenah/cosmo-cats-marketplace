@@ -1,0 +1,200 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-seed-catalog-and-cosmo-cats
+      author: llllenah
+      comment: Catalog and cats from the previous labs, their ids are used in README examples
+      changes:
+        # ids come from the sequences, so the ids Hibernate takes later do not clash with them
+        - insert:
+            tableName: category
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('category_id_seq')
+              - column:
+                  name: reference
+                  value: 11111111-1111-1111-1111-111111111111
+              - column:
+                  name: name
+                  value: "Anti-gravity toys"
+        - insert:
+            tableName: category
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('category_id_seq')
+              - column:
+                  name: reference
+                  value: 22222222-2222-2222-2222-222222222222
+              - column:
+                  name: name
+                  value: "Cosmic food"
+        - insert:
+            tableName: category
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('category_id_seq')
+              - column:
+                  name: reference
+                  value: 33333333-3333-3333-3333-333333333333
+              - column:
+                  name: name
+                  value: "Space gear"
+        - insert:
+            tableName: product
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('product_id_seq')
+              - column:
+                  name: reference
+                  value: aaaaaaaa-0000-0000-0000-000000000001
+              - column:
+                  name: name
+                  value: "Anti-gravity star yarn ball"
+              - column:
+                  name: description
+                  value: "Floats in zero gravity and never gets lost under the sofa."
+              - column:
+                  name: price
+                  valueNumeric: 12.50
+              - column:
+                  name: stock_quantity
+                  valueNumeric: 120
+              - column:
+                  name: category_id
+                  valueComputed: (SELECT id FROM category WHERE reference = '11111111-1111-1111-1111-111111111111')
+        - insert:
+            tableName: product
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('product_id_seq')
+              - column:
+                  name: reference
+                  value: aaaaaaaa-0000-0000-0000-000000000002
+              - column:
+                  name: name
+                  value: "Galaxy cosmic milk"
+              - column:
+                  name: description
+                  value: "Lactose-free milk from the Milky Way farms."
+              - column:
+                  name: price
+                  valueNumeric: 4.99
+              - column:
+                  name: stock_quantity
+                  valueNumeric: 300
+              - column:
+                  name: category_id
+                  valueComputed: (SELECT id FROM category WHERE reference = '22222222-2222-2222-2222-222222222222')
+        - insert:
+            tableName: product
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('product_id_seq')
+              - column:
+                  name: reference
+                  value: aaaaaaaa-0000-0000-0000-000000000003
+              - column:
+                  name: name
+                  value: "Comet tail scratching post"
+              - column:
+                  name: description
+                  value: "Leaves a sparkling trail after every scratch."
+              - column:
+                  name: price
+                  valueNumeric: 39.00
+              - column:
+                  name: stock_quantity
+                  valueNumeric: 25
+              - column:
+                  name: category_id
+                  valueComputed: (SELECT id FROM category WHERE reference = '33333333-3333-3333-3333-333333333333')
+        - insert:
+            tableName: product
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('product_id_seq')
+              - column:
+                  name: reference
+                  value: aaaaaaaa-0000-0000-0000-000000000004
+              - column:
+                  name: name
+                  value: "Nebula nap capsule"
+              - column:
+                  name: description
+                  value: "Warm sleeping pod with a starry sky projection."
+              - column:
+                  name: price
+                  valueNumeric: 89.90
+              - column:
+                  name: stock_quantity
+                  valueNumeric: 10
+              - column:
+                  name: category_id
+                  valueComputed: (SELECT id FROM category WHERE reference = '33333333-3333-3333-3333-333333333333')
+        - insert:
+            tableName: cosmo_cat
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('cosmo_cat_id_seq')
+              - column:
+                  name: reference
+                  value: cccccccc-0000-0000-0000-000000000001
+              - column:
+                  name: name
+                  value: Luna
+              - column:
+                  name: email
+                  value: luna@moon.space
+              - column:
+                  name: home_planet
+                  value: Moon
+        - insert:
+            tableName: cosmo_cat
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('cosmo_cat_id_seq')
+              - column:
+                  name: reference
+                  value: cccccccc-0000-0000-0000-000000000002
+              - column:
+                  name: name
+                  value: Orion
+              - column:
+                  name: email
+                  value: orion@mars.space
+              - column:
+                  name: home_planet
+                  value: Mars
+        - insert:
+            tableName: cosmo_cat
+            columns:
+              - column:
+                  name: id
+                  valueComputed: nextval('cosmo_cat_id_seq')
+              - column:
+                  name: reference
+                  value: cccccccc-0000-0000-0000-000000000003
+              - column:
+                  name: name
+                  value: Nova
+              - column:
+                  name: email
+                  value: nova@kepler.space
+              - column:
+                  name: home_planet
+                  value: Kepler-452b
+      rollback:
+        - sql:
+            sql: >
+              DELETE FROM product WHERE reference::text LIKE 'aaaaaaaa-%';
+              DELETE FROM category WHERE reference::text LIKE '11111111-%'
+              OR reference::text LIKE '22222222-%' OR reference::text LIKE '33333333-%';
+              DELETE FROM cosmo_cat WHERE reference::text LIKE 'cccccccc-%';

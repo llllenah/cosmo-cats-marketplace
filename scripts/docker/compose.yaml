@@ -1,0 +1,23 @@
+# Local PostgreSQL for running the application:
+#   docker compose -f scripts/docker/compose.yaml up -d
+# Liquibase creates the schema and the starting data when the application starts.
+# Tests do not need it, they start their own database with Testcontainers.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cosmo_cats
+      POSTGRES_USER: cosmo_cats
+      POSTGRES_PASSWORD: cosmo_cats
+    ports:
+      - "5432:5432"
+    volumes:
+      - cosmo-cats-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cosmo_cats -d cosmo_cats"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  cosmo-cats-data:
