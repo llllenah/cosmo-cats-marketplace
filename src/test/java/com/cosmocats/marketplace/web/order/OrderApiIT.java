@@ -56,13 +56,13 @@ class OrderApiIT extends AbstractIT {
 
     @Test
     void orderKeepsPriceOfTheMomentOfOrdering() throws Exception {
-        String milk = createProduct("Order test price milk", "4.99", 5);
+        String milk = createProduct("Order test price galaxy milk", "4.99", 5);
         String cartId = UUID.randomUUID().toString();
         placeOrder(cartId, LUNA_ID, milk, 1).andExpect(status().isCreated());
 
         mockMvc.perform(put("/api/v1/products/{id}", milk)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(productJson("Order test price milk", "9.99", 4)))
+                        .content(productJson("Order test price galaxy milk", "9.99", 4)))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/orders/{cartId}", cartId))
@@ -71,7 +71,7 @@ class OrderApiIT extends AbstractIT {
 
     @Test
     void sameCartCannotBeCheckedOutTwice() throws Exception {
-        String milk = createProduct("Order test twice milk", "4.99", 5);
+        String milk = createProduct("Order test twice galaxy milk", "4.99", 5);
         String cartId = UUID.randomUUID().toString();
         placeOrder(cartId, LUNA_ID, milk, 1).andExpect(status().isCreated());
 
@@ -83,7 +83,7 @@ class OrderApiIT extends AbstractIT {
 
     @Test
     void failedItemRollsBackStockOfItemsBeforeIt() throws Exception {
-        String milk = createProduct("Order test rollback milk", "4.99", 5);
+        String milk = createProduct("Order test rollback galaxy milk", "4.99", 5);
         String capsule = createProduct("Order test rollback nebula capsule", "89.90", 1);
         String cartId = UUID.randomUUID().toString();
 
@@ -103,7 +103,7 @@ class OrderApiIT extends AbstractIT {
 
     @Test
     void rejectsUnknownCosmoCatAndUnknownProduct() throws Exception {
-        String milk = createProduct("Order test unknown milk", "4.99", 5);
+        String milk = createProduct("Order test unknown galaxy milk", "4.99", 5);
 
         placeOrder(UUID.randomUUID().toString(), UUID.randomUUID().toString(), milk, 1)
                 .andExpect(status().isUnprocessableEntity())
@@ -116,7 +116,7 @@ class OrderApiIT extends AbstractIT {
 
     @Test
     void orderedProductCannotBeDeleted() throws Exception {
-        String milk = createProduct("Order test ordered milk", "4.99", 5);
+        String milk = createProduct("Order test ordered galaxy milk", "4.99", 5);
         placeOrder(UUID.randomUUID().toString(), LUNA_ID, milk, 1).andExpect(status().isCreated());
 
         mockMvc.perform(delete("/api/v1/products/{id}", milk))
