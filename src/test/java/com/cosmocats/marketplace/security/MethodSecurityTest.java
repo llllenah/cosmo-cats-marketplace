@@ -203,6 +203,20 @@ class MethodSecurityTest {
     }
 
     @Test
+    void tokenWithEmailOfCatButWithoutCosmoCatRoleOwnsNothing() {
+        // E.g. a token the identity provider issued for the committee or with no roles at all:
+        // the email alone must not make it the customer
+        logInWithToken("luna@moon.space", "COMMITTEE");
+
+        assertThatThrownBy(() -> orderService.getOrder(LUNA_CART_ID)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> orderService.placeOrder(orderFor(LUNA_ID))).isInstanceOf(AccessDeniedException.class);
+
+        logInWithToken("luna@moon.space");
+
+        assertThatThrownBy(() -> orderService.getOrder(LUNA_CART_ID)).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
     @WithMockUser(roles = "ADMIN")
     void adminReadsAnyOrder() {
         assertThat(orderService.getOrder(LUNA_CART_ID).cartId()).isEqualTo(LUNA_CART_ID);
