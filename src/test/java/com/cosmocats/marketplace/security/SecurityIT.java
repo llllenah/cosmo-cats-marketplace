@@ -118,6 +118,9 @@ class SecurityIT extends AbstractIT {
                 Arguments.of("expired", DevTokens.sign(adminClaims()
                         .issueTime(Date.from(now.minusSeconds(7200)))
                         .expirationTime(Date.from(now.minusSeconds(3600))).build(), DevTokens.devPrivateKey())),
+                // Without exp the timestamp check of Spring has nothing to compare, such a token would work forever
+                Arguments.of("without expiry", DevTokens.sign(adminClaims()
+                        .expirationTime(null).build(), DevTokens.devPrivateKey())),
                 Arguments.of("not valid yet", DevTokens.sign(adminClaims()
                         .notBeforeTime(Date.from(now.plusSeconds(3600))).build(), DevTokens.devPrivateKey())),
                 Arguments.of("issued for another service", DevTokens.sign(adminClaims()
