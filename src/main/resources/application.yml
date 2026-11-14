@@ -29,12 +29,12 @@ spring:
   security:
     oauth2:
       # /api/** accepts OAuth 2.0 bearer tokens (JWT). The keys of the identity provider are read
-      # from its JWKS. Locally it is a file served by WireMock: docker compose starts it on 8090
+      # from its JWKS. There is no default on purpose: without jwk-set-uri and issuer-uri the application
+      # does not start, instead of trusting some key. Every environment sets
+      # SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWKSETURI and SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUERURI,
+      # the profile "local" points them to the WireMock stub with the development key
       resourceserver:
         jwt:
-          jwk-set-uri: ${JWK_SET_URI:http://localhost:8090/.well-known/jwks.json}
-          # With jwk-set-uri present the issuer is only compared with the "iss" claim, nothing is called
-          issuer-uri: ${JWT_ISSUER:http://localhost:8090}
           # A token issued by the same provider for another service must not work here
           audiences: cosmo-cats-marketplace
           jws-algorithms: RS256
