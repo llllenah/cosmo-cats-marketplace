@@ -9,7 +9,8 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 /**
- * Used from @PreAuthorize and @PostAuthorize of OrderService: a cosmo cat works only with its own orders.
+ * Used from @PreAuthorize and @PostAuthorize of OrderService together with the COSMO_CAT role:
+ * a cosmo cat works only with its own orders.
  * The user from the token and the cosmo cat in the database are matched by email, which is unique
  * for cosmo cats. This relies on the identity provider putting only verified emails into tokens.
  */

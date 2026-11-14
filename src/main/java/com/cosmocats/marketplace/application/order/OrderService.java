@@ -44,7 +44,7 @@ public class OrderService {
      * if any line fails (unknown product, not enough items), nothing is saved and the stock
      * of the products checked before stays as it was.
      */
-    @PreAuthorize("hasRole('ADMIN') or @orderAccessPolicy.isCustomer(authentication, #command.customerId())")
+    @PreAuthorize("hasRole('ADMIN') or (hasRole('COSMO_CAT') and @orderAccessPolicy.isCustomer(authentication, #command.customerId()))")
     @Transactional
     public Order placeOrder(PlaceOrderCommand command) {
         if (orderRepository.findByNaturalId(command.cartId()).isPresent()) {
@@ -74,7 +74,7 @@ public class OrderService {
     }
 
     // The owner is known only after the order is loaded, so the check runs on the returned order
-    @PostAuthorize("hasRole('ADMIN') or @orderAccessPolicy.isCustomer(authentication, returnObject.customerId())")
+    @PostAuthorize("hasRole('ADMIN') or (hasRole('COSMO_CAT') and @orderAccessPolicy.isCustomer(authentication, returnObject.customerId()))")
     public Order getOrder(UUID cartId) {
         return orderRepository.findByNaturalId(cartId)
                 .map(entityMapper::toDomain)
