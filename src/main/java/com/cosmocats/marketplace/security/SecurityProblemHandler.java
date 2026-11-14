@@ -14,7 +14,6 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
 import static com.cosmocats.marketplace.web.exception.ProblemFactory.problem;
 
@@ -54,8 +53,9 @@ public class SecurityProblemHandler implements AuthenticationEntryPoint, AccessD
     }
 
     private void write(HttpServletResponse response, ProblemDetail problem) throws IOException {
+        // No charset parameter: JSON is UTF-8 by definition, and the errors of the controllers
+        // have exactly this media type too
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         objectMapper.writeValue(response.getOutputStream(), problem);
     }
 }
