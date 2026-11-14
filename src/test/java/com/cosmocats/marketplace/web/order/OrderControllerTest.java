@@ -25,6 +25,8 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -140,6 +142,9 @@ class OrderControllerTest {
                     Arguments.of(new ObjectOptimisticLockingFailureException("ProductEntity", 1L), 409, "concurrent-update"),
                     Arguments.of(new CannotAcquireLockException("deadlock detected"), 409, "concurrent-update"),
                     Arguments.of(new DataIntegrityViolationException("uq_orders_cart_id"), 409, "data-conflict"),
+                    // What @PreAuthorize of the real service throws for an order of another cat
+                    Arguments.of(new AuthorizationDeniedException("Access Denied", new AuthorizationDecision(false)),
+                            403, "forbidden"),
                     Arguments.of(new CosmoCatNotFoundException(LUNA_ID), 422, "order-reference-not-found"),
                     Arguments.of(new OrderedProductNotFoundException(MILK_ID), 422, "order-reference-not-found"));
         }
