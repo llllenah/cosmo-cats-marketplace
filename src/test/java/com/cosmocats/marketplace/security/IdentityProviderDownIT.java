@@ -9,9 +9,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithAnonymousUser;
 
+import java.time.Duration;
 import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.serviceUnavailable;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,6 +42,22 @@ class IdentityProviderDownIT extends AbstractIT {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.type").value("https://cosmo-cats.market/errors/authentication-unavailable"));
+    }
+
+    @Test
+    void slowIdentityProviderDoesNotHoldRequests() throws Exception {
+        // The keys arrive only after 5 seconds. Without a timeout every request with a token would wait
+        // that long, and a provider that hangs would take all request threads of the application.
+        identityProvider.stubFor(WireMock.get("/.well-known/jwks.json").atPriority(1).willReturn(
+                WireMock.aResponse().withStatus(200).withBodyFile("jwks.json").withFixedDelay(5_000)));
+        String token = DevTokens.token(List.of("ADMIN"), "admin@cosmo-cats.market");
+
+        long started = System.nanoTime();
+        mockMvc.perform(get("/api/v1/products").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.type").value("https://cosmo-cats.market/errors/authentication-unavailable"));
+
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(4));
     }
 
     @Test
