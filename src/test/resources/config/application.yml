@@ -1,0 +1,10 @@
+# Added to src/main/resources/application.yml in tests (Spring Boot reads both locations).
+# Tests trust the development key like the profile "local" does: DevTokens signs with it,
+# AbstractIT replaces the JWKS address with its own WireMock server.
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8090/.well-known/jwks.json
+          issuer-uri: http://localhost:8090

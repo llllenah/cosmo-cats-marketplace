@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.web.servlet.RequestBuilder;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +20,7 @@ import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
@@ -68,7 +69,7 @@ class ConcurrentRequestsIT extends AbstractIT {
         assertThat(objectMapper.readTree(product).get("stockQuantity").asInt()).isZero();
     }
 
-    private List<MockHttpServletResponse> sendAtOnce(Supplier<RequestBuilder> request) throws Exception {
+    private List<MockHttpServletResponse> sendAtOnce(Supplier<MockHttpServletRequestBuilder> request) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(REQUESTS);
         CountDownLatch start = new CountDownLatch(1);
         try {
@@ -76,7 +77,10 @@ class ConcurrentRequestsIT extends AbstractIT {
             for (int i = 0; i < REQUESTS; i++) {
                 Callable<MockHttpServletResponse> call = () -> {
                     start.await();
-                    return mockMvc.perform(request.get()).andReturn().getResponse();
+                    // The mock user of the test class lives in a thread local of the test thread,
+                    // the worker threads have to bring their own user
+                    return mockMvc.perform(request.get().with(user("admin").roles("ADMIN")))
+                            .andReturn().getResponse();
                 };
                 futures.add(executor.submit(call));
             }

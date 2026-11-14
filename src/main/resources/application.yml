@@ -26,6 +26,26 @@ spring:
         order_updates: true
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  security:
+    oauth2:
+      # /api/** accepts OAuth 2.0 bearer tokens (JWT). The keys of the identity provider are read
+      # from its JWKS. There is no default on purpose: without jwk-set-uri and issuer-uri the application
+      # does not start, instead of trusting some key. Every environment sets
+      # SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWKSETURI and SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUERURI,
+      # the profile "local" points them to the WireMock stub with the development key
+      resourceserver:
+        jwt:
+          # A token issued by the same provider for another service must not work here
+          audiences: cosmo-cats-marketplace
+          jws-algorithms: RS256
+      # Pages for people (Swagger UI, /account) use OAuth 2.0 login with GitHub.
+      # Create an OAuth app (callback http://localhost:8080/login/oauth2/code/github) and set both variables
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:github-client-id-is-not-set}
+            client-secret: ${GITHUB_CLIENT_SECRET:github-client-secret-is-not-set}
+            scope: read:user
 
 server:
   port: 8080
@@ -44,6 +64,14 @@ feature:
     enabled: false
 
 application:
+  security:
+    # Machine clients that send X-API-Key instead of a token. Only the SHA-256 of a key is kept here,
+    # so reading the configuration does not give anybody a working key.
+    # An empty hash means the client cannot log in at all.
+    api-keys:
+      intergalactic-committee:
+        key-sha256: ${COMMITTEE_API_KEY_SHA256:}
+        roles: COMMITTEE
   kitty-products:
     # Anti-gravity toys
     category-id: 11111111-1111-1111-1111-111111111111

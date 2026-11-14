@@ -10,6 +10,7 @@ import com.cosmocats.marketplace.application.order.PlaceOrderCommand;
 import com.cosmocats.marketplace.domain.order.Order;
 import com.cosmocats.marketplace.domain.order.OrderItem;
 import com.cosmocats.marketplace.domain.order.OrderStatus;
+import com.cosmocats.marketplace.security.SecurityConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,9 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationDeniedException;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -46,7 +50,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OrderController.class)
-@Import(OrderMapper.class)
+@Import({OrderMapper.class, SecurityConfig.class})
+@WithMockUser
 @DisplayName("OrderController")
 class OrderControllerTest {
 
@@ -137,6 +142,9 @@ class OrderControllerTest {
                     Arguments.of(new ObjectOptimisticLockingFailureException("ProductEntity", 1L), 409, "concurrent-update"),
                     Arguments.of(new CannotAcquireLockException("deadlock detected"), 409, "concurrent-update"),
                     Arguments.of(new DataIntegrityViolationException("uq_orders_cart_id"), 409, "data-conflict"),
+                    // What @PreAuthorize of the real service throws for an order of another cat
+                    Arguments.of(new AuthorizationDeniedException("Access Denied", new AuthorizationDecision(false)),
+                            403, "forbidden"),
                     Arguments.of(new CosmoCatNotFoundException(LUNA_ID), 422, "order-reference-not-found"),
                     Arguments.of(new OrderedProductNotFoundException(MILK_ID), 422, "order-reference-not-found"));
         }

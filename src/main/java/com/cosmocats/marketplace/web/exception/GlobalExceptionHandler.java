@@ -13,6 +13,7 @@ import com.cosmocats.marketplace.application.exception.ProductNotFoundException;
 import com.cosmocats.marketplace.application.exception.ProductValidationException;
 import com.cosmocats.marketplace.application.exception.UnsupportedCurrencyException;
 import com.cosmocats.marketplace.featuretoggle.FeatureNotAvailableException;
+import com.cosmocats.marketplace.security.SecurityProblemHandler;
 import com.cosmocats.marketplace.web.common.InvalidPageTokenException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
@@ -27,6 +28,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -36,11 +38,12 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+
+import static com.cosmocats.marketplace.web.exception.ProblemFactory.problem;
 
 /**
  * Converts exceptions into RFC 9457 problem details.
@@ -50,8 +53,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
-
-    private static final String ERROR_TYPE_BASE_URL = "https://cosmo-cats.market/errors/";
 
     // Bean Validation returns violations from a HashSet, so one field with several errors
     // came back in random order. Sorting by message too makes the response stable.
@@ -204,6 +205,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "The request conflicts with existing data.", request.getRequestURI());
     }
 
+    // Thrown by @PreAuthorize and @PostAuthorize on the services, i.e. inside the controller call,
+    // where the security filters no longer see it. The response is the same as theirs.
+    @ExceptionHandler(AccessDeniedException.class)
+    public ProblemDetail handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        return SecurityProblemHandler.forbidden(request.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpectedException(Exception ex, HttpServletRequest request) {
         log.error("Unexpected error while processing {} {}", request.getMethod(), request.getRequestURI(), ex);
@@ -229,15 +237,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .collect(Collectors.joining(" "));
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "validation", "Validation failed", detail, instance);
         problem.setProperty("errors", errors);
-        return problem;
-    }
-
-    private static ProblemDetail problem(HttpStatus status, String errorType, String title,
-                                         String detail, String instance) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setType(URI.create(ERROR_TYPE_BASE_URL + errorType));
-        problem.setTitle(title);
-        problem.setInstance(URI.create(instance));
         return problem;
     }
 

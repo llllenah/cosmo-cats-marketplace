@@ -6,32 +6,41 @@ Backend маркетплейсу космічних товарів для кот
 - Lab 2: юніт-, контролерні та інтеграційні тести, покриття JaCoCo з перевіркою в CI, ціна в іншій валюті через зовнішній сервіс, застабований WireMock.
 - Lab 2.1 (додаткова): feature toggles на рівні середовища зі Spring AOP.
 - Lab 3: PostgreSQL, схема в 3NF через Liquibase, Spring Data JPA, транзакції, Natural ID для замовлень, звіт з projection, тести з Testcontainers.
+- Lab 4.1: Spring Security. OAuth 2.0 bearer-токени (JWT, ключі з JWKS-файлу у WireMock), кастомний фільтр API Key, логін через GitHub, method level security, профіль `no-auth`.
 
 ## Стек
 
 - Java 17+
-- Spring Boot 3.3 (Web, Validation, AOP, Data JPA)
+- Spring Boot 3.3 (Web, Validation, AOP, Data JPA, Security, OAuth2 Resource Server, OAuth2 Client)
 - PostgreSQL 16, Liquibase
 - Gradle (wrapper у репозиторії)
 - springdoc-openapi (Swagger UI для перегляду контракту)
-- Тести: JUnit 5, Mockito, AssertJ, MockMvc, WireMock, Testcontainers, JaCoCo
+- Тести: JUnit 5, Mockito, AssertJ, MockMvc, Spring Security Test, WireMock, Testcontainers, JaCoCo
 
 ## Запуск
 
-Потрібна база PostgreSQL. Локально її піднімає Docker Compose, схему й початкові дані створює Liquibase при старті застосунку:
+Потрібні база PostgreSQL і WireMock, який грає роль зовнішніх сервісів (курси валют і JWKS identity provider). Локально їх піднімає Docker Compose, схему й початкові дані створює Liquibase при старті застосунку:
 
 ```bash
 docker compose -f scripts/docker/compose.yaml up -d
 ```
 
 ```bash
-./gradlew bootRun          # Linux / macOS / Git Bash
-gradlew.bat bootRun        # Windows cmd / PowerShell
+./gradlew bootRun --args='--spring.profiles.active=local'          # Linux / macOS / Git Bash
+gradlew.bat bootRun --args="--spring.profiles.active=local"        # Windows cmd / PowerShell
 ```
 
 Застосунок стартує на `http://localhost:8080`. Підключення до іншої бази задається змінними `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
 
-- Swagger UI: http://localhost:8080/swagger-ui.html
+Профіль `local` каже застосунку довіряти ключам з WireMock на `localhost:8090`. Без нього (і без адреси справжнього identity provider, див. «Безпека») застосунок не стартує.
+
+Усі запити до `/api` вимагають автентифікації (розділ «Безпека»). Щоб просто подивитися на API без токенів і ключів, є профіль `no-auth`:
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=no-auth'
+```
+
+- Swagger UI: http://localhost:8080/swagger-ui.html (після логіну через GitHub або з профілем `no-auth`)
 - Контракт: `src/main/resources/api-specs/cosmo-cats-product-api.yml`
 
 ## Архітектура
@@ -48,6 +57,7 @@ com.cosmocats.marketplace
 ├── application       сервіси продуктів, замовлень, звітів і цін, курсор пагінації, винятки
 ├── infrastructure    persistence: JPA-сутності, Spring Data репозиторії, projection; exchangerate: HTTP-клієнт сервісу курсів
 ├── featuretoggle     @FeatureToggle, FeatureToggleAspect, FeatureToggleService, конфігурація прапорів
+├── security          filter chains, фільтр і provider для API Key, 401/403 як problem details, профіль no-auth
 └── web               REST-контролери, DTO, мапери, пагінація, валідація, обробка помилок
 ```
 
@@ -75,8 +85,9 @@ com.cosmocats.marketplace
 | POST | `/api/v1/orders` | Оформити кошик як замовлення | 201 + `Location` |
 | GET | `/api/v1/orders/{cartId}` | Замовлення за id кошика | 200 |
 | GET | `/api/v1/reports/popular-products?limit=10` | Товари, які купують найчастіше | 200 |
+| GET | `/account` | GitHub-акаунт користувача, що залогінився (сторінка для людей, не частина `/api`) | 200 |
 
-Коди помилок: 400 (валідація), 404 (продукт або замовлення не знайдено), 409 (назва вже зайнята в категорії, кошик уже оформлений, не вистачає товару, продукт є в замовленнях, одночасна зміна тих самих даних), 422 (категорія, кіт або продукт із тіла запиту не існує, валюту не знає сервіс курсів), 500 (непередбачена помилка без деталей реалізації), 503 (сервіс курсів недоступний).
+Коди помилок: 400 (валідація), 401 (немає токена чи ключа або вони недійсні), 403 (роль або власник даних не дозволяє дію), 404 (продукт або замовлення не знайдено), 409 (назва вже зайнята в категорії, кошик уже оформлений, не вистачає товару, продукт є в замовленнях, одночасна зміна тих самих даних), 422 (категорія, кіт або продукт із тіла запиту не існує, валюту не знає сервіс курсів), 500 (непередбачена помилка без деталей реалізації), 503 (сервіс курсів недоступний або неможливо перевірити токен, бо недоступні ключі identity provider).
 
 ### Валідація `ProductRequestDto`
 
@@ -101,6 +112,8 @@ com.cosmocats.marketplace
 | `11111111-1111-1111-1111-111111111111` | Anti-gravity toys |
 | `22222222-2222-2222-2222-222222222222` | Cosmic food |
 | `33333333-3333-3333-3333-333333333333` | Space gear |
+
+Приклади нижче написані для профілю `no-auth`. Зі звичайним запуском до кожного запиту треба додати `-H "Authorization: Bearer $TOKEN"` (як отримати токен — у розділі «Безпека»).
 
 Створення продукту:
 
@@ -182,11 +195,7 @@ curl "http://localhost:8080/api/v1/products?pageSize=2&pageToken=YWFhYWFhYWEtMDA
 
 Налаштування в `application.yml`: `application.exchange-rate-service.base-url`, `connect-timeout` (1s), `read-timeout` (2s).
 
-Для ручної перевірки сервіс курсів можна підняти з готовими стабами з `scripts/wiremock` (EUR, UAH, GBP; JPY відповідає з затримкою 5 с, щоб побачити 503; решта валют дає 404):
-
-```bash
-docker run --rm -p 8090:8080 -v "$PWD/scripts/wiremock:/home/wiremock" wiremock/wiremock:3.9.2
-```
+Для ручної перевірки сервіс курсів піднімається разом з базою (`docker compose -f scripts/docker/compose.yaml up -d`) з готовими стабами з `scripts/wiremock`: EUR, UAH, GBP; JPY відповідає з затримкою 5 с, щоб побачити 503; решта валют дає 404.
 
 ```bash
 curl "http://localhost:8080/api/v1/products/aaaaaaaa-0000-0000-0000-000000000001/price?currency=EUR"
@@ -266,6 +275,75 @@ curl -i -X POST http://localhost:8080/api/v1/orders \
 curl "http://localhost:8080/api/v1/reports/popular-products?limit=5"
 ```
 
+## Безпека (Lab 4.1)
+
+### Хто і як заходить
+
+У застосунку два filter chain, бо є два види клієнтів (`security/SecurityConfig`):
+
+| Шлях | Для кого | Автентифікація | Сесія |
+|---|---|---|---|
+| `/api/**` | програми | OAuth 2.0 bearer-токен (JWT) або API Key у заголовку `X-API-Key` | немає (stateless), CSRF вимкнено |
+| усе інше (Swagger UI, `/account`) | люди в браузері | OAuth 2.0 Login через GitHub | є, CSRF увімкнено |
+
+Filter chain вирішує тільки, **хто** прийшов. **Що** йому можна, написано біля бізнес-логіки через `@PreAuthorize`/`@PostAuthorize` на сервісах, тому новий контролер не може обійти правило випадково:
+
+| Дія | Кому можна |
+|---|---|
+| читати каталог, котів, ціни | будь-кому автентифікованому |
+| створити, змінити, видалити продукт | `ADMIN` |
+| оформити замовлення | `ADMIN` або кіт для себе: `email` з токена збігається з `email` кота-замовника |
+| прочитати замовлення | `ADMIN` або власник замовлення (`@PostAuthorize`, бо власник відомий після завантаження) |
+| звіт для комітету | `COMMITTEE` або `ADMIN` |
+
+Помилки 401/403/503 пишуться в тому ж форматі problem details, що й решта (`SecurityProblemHandler`). Причина відхилення токена є тільки в заголовку `WWW-Authenticate` (RFC 6750), у тілі її немає.
+
+### JWT і JWKS-файл (Docker + WireMock)
+
+Застосунок є resource server: сам токени не видає, а перевіряє підпис ключами identity provider, які читає з JWKS. Локально identity provider грає WireMock з `scripts/docker/compose.yaml`: він віддає файл `scripts/wiremock/__files/jwks.json` за адресою `http://localhost:8090/.well-known/jwks.json`.
+
+Що перевіряється в токені: підпис RS256 ключем з JWKS, `iss`, `aud` = `cosmo-cats-marketplace` (токен того ж провайдера для іншого сервісу не підійде), `exp`/`nbf`. Ролі беруться з claim `roles` (`["ADMIN"]` → `ROLE_ADMIN`), а не зі `scope`: інакше клієнт міг би попросити собі scope з назвою ролі.
+
+Токен для ручних запитів підписується dev-ключем з `scripts/security`:
+
+```bash
+./gradlew -q devToken -Proles=ADMIN
+```
+
+```bash
+./gradlew -q devToken -Proles=COSMO_CAT -Pemail=luna@moon.space
+```
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/products
+```
+
+Dev-ключ лежить у репозиторії відкрито, тому йому довіряють тільки профіль `local` (`application-local.yml`) і тести (`src/test/resources/config/application.yml`). У `application.yml` адреси identity provider немає навмисно: інші середовища задають змінні `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWKSETURI` і `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUERURI`. Якщо їх забути, застосунок не стартує, а не починає мовчки приймати токени, підписані відкритим dev-ключем (`IdentityProviderConfigurationTest`).
+
+Ключі завантажуються під час запиту, тому на завантаження стоїть таймаут 2 с. Якщо identity provider лежить або відповідає повільно, клієнт швидко отримує 503, а потоки застосунку не зависають в очікуванні.
+
+### API Key
+
+Кастомний фільтр `ApiKeyAuthenticationFilter` читає `X-API-Key`, `ApiKeyAuthenticationProvider` шукає клієнта з таким ключем і дає йому ролі з конфігурації. Так звіт забирає система Інтергалактичного комітету (роль `COMMITTEE`).
+
+- У конфігурації лежить не ключ, а його SHA-256 (`application.security.api-keys.<клієнт>.key-sha256`, змінна `COMMITTEE_API_KEY_SHA256`). Хто прочитав конфігурацію, не отримує робочий ключ. Порожній хеш означає, що клієнт не може зайти взагалі. Не-хеш у цьому полі зупиняє старт застосунку.
+- Без ключа, з невідомим, порожнім або задовгим ключем відповідь 401. Запит одночасно з ключем і з `Authorization` теж 401: незрозуміло, ким клієнт хоче бути.
+- Локальний ключ `committee-local-key` вмикається тим самим профілем `local`:
+
+```bash
+curl -H "X-API-Key: committee-local-key" "http://localhost:8080/api/v1/reports/popular-products"
+```
+
+### Логін через GitHub
+
+Сторінки поза `/api` відкриваються після OAuth 2.0 Login через GitHub. Потрібна OAuth app (GitHub → Settings → Developer settings → OAuth Apps) з callback `http://localhost:8080/login/oauth2/code/github` і дві змінні середовища: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`. Після цього http://localhost:8080/account перекине на GitHub і покаже логін користувача, а Swagger UI відкриється в тій самій сесії.
+
+GitHub-сесія не дає доступу до `/api`: там потрібен токен або ключ. Без змінних застосунок стартує, просто логін не пройде на боці GitHub.
+
+### Профіль `no-auth`
+
+`NoAuthSecurityConfig` дозволяє всі запити, а `@PreAuthorize` вимикається разом з автентифікацією (`MethodSecurityConfig` має `@Profile("!no-auth")`). При старті в лог пишеться попередження, а разом з профілем `prod` або `production` застосунок не стартує.
+
 ## Тести
 
 ```bash
@@ -280,7 +358,7 @@ curl "http://localhost:8080/api/v1/reports/popular-products?limit=5"
 - `jacocoTestCoverageVerification` валить збірку, якщо будь-який файл має менше 80% покриття рядків. Виключений тільки клас з `main()`;
 - зведення по тестах пишеться в `build/reports/tests/test-summary.md`.
 
-Поточне покриття: 100% рядків, 98.8% гілок (239 юніт-тестів і 72 інтеграційні).
+Поточне покриття: 99.6% рядків, 97.4% гілок (308 юніт-тестів і 95 інтеграційних).
 
 | Рівень | Класи | Що перевіряють |
 |---|---|---|
@@ -289,6 +367,8 @@ curl "http://localhost:8080/api/v1/reports/popular-products?limit=5"
 | Сервіси замовлень і звітів (Mockito) | `OrderServiceTest`, `ProductReportServiceTest` | ціни з каталогу, списання залишку, 409/422, статуси для звіту |
 | Контролери замовлень і звітів (`@WebMvcTest`) | `OrderControllerTest`, `ReportControllerTest` | валідація замовлення (той самий продукт двічі, кількість, порожній список), коди помилок, межі `limit` |
 | Юніт | `PageTokenCodecTest`, `CosmicWordValidatorTest`, `ProductMapperTest`, `EntityMapperTest`, `EachProductOnceValidatorTest`, `GlobalExceptionHandlerTest`, доменні тести | кодування токена сторінки, космічні слова, маппінг, інваріанти доменних records |
+| Безпека, юніт (`@WebMvcTest`, `@SpringJUnitConfig`) | `ApiSecurityTest`, `GitHubLoginTest`, `MethodSecurityTest`, `NoAuthProfileTest`, `ApiKeyAuthenticationProviderTest`, `ApiKeyPropertiesTest`, `SecurityProblemHandlerTest`, `IdentityProviderConfigurationTest` | 401 без токена й ключа, ролі з claim `roles`, API Key (правильний, чужий, порожній, задовгий, разом з токеном), redirect на GitHub і mock GitHub login, CSRF для сесії, правила ролей і власника замовлення на справжніх сервісах (email без ролі `COSMO_CAT` нічого не дає), профіль `no-auth`, без адреси identity provider застосунок не стартує |
+| Безпека, інтеграційні | `SecurityIT`, `NoAuthProfileIT`, `IdentityProviderDownIT` | токени, підписані dev-ключем, і JWKS з WireMock без моків: прострочений, без `exp`, чужий `aud`/`iss`, інший ключ, HS256, `alg: none`, підмінений payload; кіт і чужі замовлення; недоступний або повільний JWKS дає 503 |
 | Репозиторії (`@DataJpaTest` + Testcontainers) | `ProductRepositoryIT`, `CategoryRepositoryIT`, `CosmoCatRepositoryIT`, `OrderRepositoryIT`, `LiquibaseMigrationIT` | CRUD кожної сутності, natural id, keyset-сторінки, звіт з projection, оптимістичне блокування, change sets і теги Liquibase, індекси, послідовності, unique і CHECK обмеження |
 | Інтеграційні (`@SpringBootTest` + Testcontainers) | `ProductApiIT`, `ProductPriceIT`, `ApiContractIT`, `OrderApiIT`, `ConcurrentRequestsIT`, тести прапорів | повний CRUD через усі шари, відкат транзакції замовлення, одночасні запити (409 замість 500), сервіс курсів через WireMock, відповідність ендпоінтів OpenAPI-контракту |
 
@@ -296,6 +376,10 @@ CI: `.github/workflows/pull_request.yml` запускає `./gradlew build` на
 
 ## Обмеження
 
+- Ролі в токені (`roles`) і зв'язок токена з котом через `email` — домовленість з identity provider. Застосунок довіряє, що провайдер кладе в токен тільки підтверджений email.
+- Чуже замовлення дає 403, а неіснуюче 404, тобто за відповіддю видно, чи існує кошик з таким id. Id кошика — випадковий UUID, тому перебрати їх нереально.
+- API-ключі не мають терміну дії й ротації: щоб замінити ключ, треба змінити хеш у конфігурації і перезапустити застосунок. Обмеження кількості спроб (rate limit) немає.
+- Будь-який користувач GitHub може залогінитися і побачити Swagger UI; списку дозволених акаунтів немає.
 - Категорій і котів можна змінювати тільки міграціями, REST API для них немає.
 - Перевірки в сервісах (назва, залишок) не атомарні. Одночасні запити ловлять обмеження БД і `@Version`, клієнт отримує 409 і має повторити запит сам.
 - `PUT /products/{id}` перезаписує залишок цілком, а версію клієнт не передає. Якщо між GET і PUT хтось оформив замовлення, PUT поверне старий залишок. Виправлення — `ETag`/`If-Match` з `version`, це поза межами лаби.

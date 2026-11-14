@@ -1,8 +1,18 @@
-# Local PostgreSQL for running the application:
+# Local PostgreSQL and stubs of external services for running the application:
 #   docker compose -f scripts/docker/compose.yaml up -d
 # Liquibase creates the schema and the starting data when the application starts.
 # Tests do not need it, they start their own database with Testcontainers.
 services:
+  # Stands in for the external services: exchange rates and the identity provider.
+  # The application reads the public keys for checking access tokens from
+  # http://localhost:8090/.well-known/jwks.json (scripts/wiremock/__files/jwks.json)
+  wiremock:
+    image: wiremock/wiremock:3.9.2
+    ports:
+      - "8090:8080"
+    volumes:
+      - ../wiremock:/home/wiremock:ro
+
   postgres:
     image: postgres:16-alpine
     environment:

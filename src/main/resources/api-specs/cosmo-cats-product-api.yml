@@ -6,11 +6,22 @@ info:
     orders, reports and endpoints behind feature toggles.
     All errors follow RFC 9457 (Problem Details for HTTP APIs) and are returned
     with the `application/problem+json` media type.
+
+    Every `/api` request must be authenticated, either with an OAuth 2.0 access token
+    (`Authorization: Bearer <JWT>`) or with an API key (`X-API-Key`). Sending both is rejected.
+    Roles: `ADMIN` changes the catalog and sees every order, a cosmo cat (a token with the `email`
+    of the cat) places and reads only its own orders, `COMMITTEE` and `ADMIN` read the reports.
+    Pages outside `/api` are for people and use OAuth 2.0 login with GitHub.
   version: 1.0.0
 servers:
   - url: http://localhost:8080
     description: Local environment
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
 tags:
+  - name: Account
+    description: Pages for people logged in with GitHub
   - name: Products
     description: Operations with marketplace products
   - name: Orders
@@ -85,8 +96,12 @@ paths:
                     status: 400
                     detail: Page token is invalid. Request the first page without pageToken.
                     instance: /api/v1/products
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
     post:
       tags: [Products]
       operationId: createProduct
@@ -112,12 +127,18 @@ paths:
                 $ref: '#/components/schemas/ProductResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
 
   /api/v1/products/{id}:
     parameters:
@@ -141,10 +162,14 @@ paths:
                 $ref: '#/components/schemas/ProductResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
     put:
       tags: [Products]
       operationId: updateProduct
@@ -165,6 +190,10 @@ paths:
                 $ref: '#/components/schemas/ProductResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -173,6 +202,8 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
     delete:
       tags: [Products]
       operationId: deleteProduct
@@ -182,6 +213,10 @@ paths:
           description: Product deleted
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -198,6 +233,8 @@ paths:
                 instance: /api/v1/products/aaaaaaaa-0000-0000-0000-000000000001
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
 
   /api/v1/products/{id}/price:
     parameters:
@@ -234,6 +271,8 @@ paths:
                 $ref: '#/components/schemas/ProductPrice'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -258,10 +297,14 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CosmoCat'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/FeatureNotAvailable'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
 
   /api/v1/kitty-products:
     get:
@@ -280,10 +323,14 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ProductResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/FeatureNotAvailable'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
 
   /api/v1/orders:
     post:
@@ -314,12 +361,18 @@ paths:
                 $ref: '#/components/schemas/OrderResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/OrderConflict'
         '422':
           $ref: '#/components/responses/OrderReferenceNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
 
   /api/v1/orders/{cartId}:
     parameters:
@@ -343,6 +396,10 @@ paths:
                 $ref: '#/components/schemas/OrderResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No order for this cart
           content:
@@ -357,6 +414,8 @@ paths:
                 instance: /api/v1/orders/dddddddd-0000-0000-0000-000000000001
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
 
   /api/v1/reports/popular-products:
     get:
@@ -388,11 +447,84 @@ paths:
                   $ref: '#/components/schemas/PopularProduct'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AuthenticationUnavailable'
+
+  /account:
+    get:
+      tags: [Account]
+      operationId: getAccount
+      summary: GitHub account of the logged in user
+      description: |
+        Not part of the machine API: it works with the browser session created by the GitHub login.
+        Without a session the browser is redirected to GitHub. With the `no-auth` profile
+        nobody logs in and this page does not exist.
+      security:
+        - gitHubLogin: []
+      responses:
+        '200':
+          description: The logged in GitHub user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '302':
+          description: Not logged in, redirect to the GitHub login (`/oauth2/authorization/github`)
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        OAuth 2.0 access token (JWT, RS256) of the identity provider. The token must have
+        the `aud` claim `cosmo-cats-marketplace`. Roles come from the `roles` claim,
+        a cosmo cat is recognised by the `email` claim.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Key of a machine client, e.g. the Intergalactic committee that reads the reports.
+    gitHubLogin:
+      type: oauth2
+      description: OAuth 2.0 login with GitHub, the application keeps the user in a session cookie.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://github.com/login/oauth/authorize
+          tokenUrl: https://github.com/login/oauth/access_token
+          scopes:
+            read:user: Read the profile of the user
   schemas:
+    Account:
+      type: object
+      required: [login]
+      properties:
+        login:
+          type: string
+          example: luna-the-cat
+        name:
+          type: string
+          nullable: true
+          description: Display name, GitHub users may leave it empty
+          example: Luna
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: https://avatars.githubusercontent.com/u/1?v=4
+
     ProductRequest:
       type: object
       required: [name, price, stockQuantity, categoryId]
@@ -753,6 +885,8 @@ components:
       description: |
         The exchange rate service failed, did not answer in time or returned an invalid rate.
         Details of the failure are logged and never exposed.
+        Like every other operation, this one can also answer 503 with the
+        `authentication-unavailable` type when the access token cannot be checked.
       content:
         application/problem+json:
           schema:
@@ -802,6 +936,52 @@ components:
             status: 422
             detail: Cosmo cat with id 'cccccccc-0000-0000-0000-000000000099' does not exist.
             instance: /api/v1/orders
+    Unauthorized:
+      description: |
+        No credentials, or they are not valid: the token is expired, signed by an unknown key,
+        issued for another service, or the API key is unknown. For a bad token the reason is
+        in the `WWW-Authenticate` header (RFC 6750).
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          example: Bearer error="invalid_token", error_description="Jwt expired at 2026-11-14T10:00:00Z"
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/unauthorized
+            title: Authentication required
+            status: 401
+            detail: A valid bearer token or API key is required.
+            instance: /api/v1/products
+    Forbidden:
+      description: The caller is known but its role, or the owner of the data, does not allow the action.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/forbidden
+            title: Access denied
+            status: 403
+            detail: You do not have permission to perform this action.
+            instance: /api/v1/products
+    AuthenticationUnavailable:
+      description: |
+        The token could not be checked because the keys of the identity provider are unavailable.
+        The token itself may be valid, the request can be repeated later.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: https://cosmo-cats.market/errors/authentication-unavailable
+            title: Authentication unavailable
+            status: 503
+            detail: Access tokens cannot be checked right now. Please try again later.
+            instance: /api/v1/products
     InternalError:
       description: Unexpected server error. Internal details are never exposed.
       content:
