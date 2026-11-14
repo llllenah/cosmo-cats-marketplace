@@ -30,8 +30,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -75,12 +73,13 @@ class SecurityIT extends AbstractIT {
         expectUnauthorized(mockMvc.perform(get(PRODUCTS_URL)));
     }
 
+    // The keys come from the JWKS file served by WireMock. The decoder caches them, so the request
+    // log of WireMock (cleared before every test) cannot show the download; IdentityProviderDownIT
+    // proves it instead: without the JWKS endpoint the same token is not accepted
     @Test
-    void tokenIsCheckedWithKeysDownloadedFromIdentityProvider() throws Exception {
+    void tokenSignedWithKeyOfIdentityProviderIsAccepted() throws Exception {
         mockMvc.perform(get(PRODUCTS_URL).with(token("COSMO_CAT", LUNA_EMAIL)))
                 .andExpect(status().isOk());
-
-        identityProvider.verify(getRequestedFor(urlEqualTo("/.well-known/jwks.json")));
     }
 
     @Test
