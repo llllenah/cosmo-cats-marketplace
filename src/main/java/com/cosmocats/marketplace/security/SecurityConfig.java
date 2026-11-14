@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -56,7 +57,8 @@ public class SecurityConfig {
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                         .authenticationEntryPoint(problemHandler)
-                        .accessDeniedHandler(problemHandler))
+                        .accessDeniedHandler(problemHandler)
+                        .withObjectPostProcessor(failuresHandledBy(problemHandler)))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(problemHandler)
                         .accessDeniedHandler(problemHandler));
@@ -72,6 +74,19 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2Login(Customizer.withDefaults());
         return http.build();
+    }
+
+    // The resource server DSL has no setter for the failure handler of its filter,
+    // so it is set when the configurer has created the filter
+    private static ObjectPostProcessor<BearerTokenAuthenticationFilter> failuresHandledBy(
+            SecurityProblemHandler problemHandler) {
+        return new ObjectPostProcessor<>() {
+            @Override
+            public <O extends BearerTokenAuthenticationFilter> O postProcess(O filter) {
+                filter.setAuthenticationFailureHandler(problemHandler);
+                return filter;
+            }
+        };
     }
 
     // By default Spring reads authorities from the "scope" claim. Here the identity provider
