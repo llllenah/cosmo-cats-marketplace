@@ -16,10 +16,17 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+
+import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Two filter chains, because the application has two kinds of callers:
@@ -74,6 +81,13 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2Login(Customizer.withDefaults());
         return http.build();
+    }
+
+    // Spring checks exp only when a token has it, so a token issued without exp would never expire.
+    // Spring Boot adds every OAuth2TokenValidator bean to the checks of the JWT decoder.
+    @Bean
+    OAuth2TokenValidator<Jwt> expiryRequiredValidator() {
+        return new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull);
     }
 
     // The resource server DSL has no setter for the failure handler of its filter,
