@@ -11,6 +11,7 @@ import com.cosmocats.marketplace.infrastructure.persistence.ProductRepository;
 import com.cosmocats.marketplace.infrastructure.persistence.entity.ProductEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ import java.util.UUID;
 /**
  * Read methods run in read-only transactions (Hibernate skips dirty checking for them),
  * every write method is one transaction: validation and saving see the same data.
+ * Any authenticated caller can read the catalog, only an admin can change it.
  */
 @Service
 @RequiredArgsConstructor
@@ -33,6 +35,7 @@ public class ProductServiceImpl implements ProductService {
     private final EntityMapper entityMapper;
 
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public Product createProduct(Product product) {
         Product newProduct = product.withId(UUID.randomUUID());
@@ -65,6 +68,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public Product updateProduct(Product product) {
         ProductEntity entity = findProduct(product.id());
@@ -75,6 +79,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public void deleteProduct(UUID id) {
         ProductEntity entity = findProduct(id);

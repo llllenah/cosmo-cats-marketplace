@@ -2,6 +2,7 @@ package com.cosmocats.marketplace.web.report;
 
 import com.cosmocats.marketplace.application.report.PopularProduct;
 import com.cosmocats.marketplace.application.report.ProductReportService;
+import com.cosmocats.marketplace.security.SecurityConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -23,7 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ReportController.class)
-@Import(ReportMapper.class)
+@Import({ReportMapper.class, SecurityConfig.class})
+@WithMockUser
 @DisplayName("ReportController")
 class ReportControllerTest {
 

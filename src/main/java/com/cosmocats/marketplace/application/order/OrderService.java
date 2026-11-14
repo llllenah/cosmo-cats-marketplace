@@ -16,6 +16,8 @@ import com.cosmocats.marketplace.infrastructure.persistence.entity.CosmoCatEntit
 import com.cosmocats.marketplace.infrastructure.persistence.entity.OrderEntity;
 import com.cosmocats.marketplace.infrastructure.persistence.entity.ProductEntity;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PostAuthorize;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,7 @@ public class OrderService {
      * if any line fails (unknown product, not enough items), nothing is saved and the stock
      * of the products checked before stays as it was.
      */
+    @PreAuthorize("hasRole('ADMIN') or @orderAccessPolicy.isCustomer(authentication, #command.customerId())")
     @Transactional
     public Order placeOrder(PlaceOrderCommand command) {
         if (orderRepository.findByNaturalId(command.cartId()).isPresent()) {
@@ -70,6 +73,8 @@ public class OrderService {
         return entityMapper.toDomain(orderRepository.save(entity));
     }
 
+    // The owner is known only after the order is loaded, so the check runs on the returned order
+    @PostAuthorize("hasRole('ADMIN') or @orderAccessPolicy.isCustomer(authentication, returnObject.customerId())")
     public Order getOrder(UUID cartId) {
         return orderRepository.findByNaturalId(cartId)
                 .map(entityMapper::toDomain)

@@ -1,0 +1,7 @@
+# Local development only: ./gradlew bootRun --args='--spring.profiles.active=local'
+# Lets the committee client log in with X-API-Key: committee-local-key
+application:
+  security:
+    api-keys:
+      intergalactic-committee:
+        key-sha256: 91c582005df797145d5bcfe9bafd905d1bd733d9c4317fd6c6bcfbab9102c196

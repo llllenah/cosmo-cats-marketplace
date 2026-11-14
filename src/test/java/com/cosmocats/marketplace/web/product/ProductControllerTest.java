@@ -11,6 +11,7 @@ import com.cosmocats.marketplace.application.product.PageCursor;
 import com.cosmocats.marketplace.application.product.PagedResult;
 import com.cosmocats.marketplace.application.product.ProductService;
 import com.cosmocats.marketplace.domain.product.Product;
+import com.cosmocats.marketplace.security.SecurityConfig;
 import com.cosmocats.marketplace.web.common.PageTokenCodec;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -26,6 +27,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -60,7 +62,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ProductController.class)
-@Import({ProductMapper.class, PageTokenCodec.class})
+@Import({ProductMapper.class, PageTokenCodec.class, SecurityConfig.class})
+@WithMockUser
 @DisplayName("ProductController")
 class ProductControllerTest {
 

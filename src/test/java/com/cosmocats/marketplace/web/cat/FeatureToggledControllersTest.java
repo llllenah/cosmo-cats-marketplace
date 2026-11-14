@@ -6,6 +6,7 @@ import com.cosmocats.marketplace.domain.cat.CosmoCat;
 import com.cosmocats.marketplace.domain.product.Product;
 import com.cosmocats.marketplace.featuretoggle.Feature;
 import com.cosmocats.marketplace.featuretoggle.FeatureNotAvailableException;
+import com.cosmocats.marketplace.security.SecurityConfig;
 import com.cosmocats.marketplace.web.common.PageTokenCodec;
 import com.cosmocats.marketplace.web.product.KittyProductController;
 import com.cosmocats.marketplace.web.product.ProductMapper;
@@ -16,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -29,7 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({CosmoCatController.class, KittyProductController.class})
-@Import({CosmoCatMapper.class, ProductMapper.class, PageTokenCodec.class})
+@Import({CosmoCatMapper.class, ProductMapper.class, PageTokenCodec.class, SecurityConfig.class})
+@WithMockUser
 @DisplayName("Controllers behind feature toggles")
 class FeatureToggledControllersTest {
 

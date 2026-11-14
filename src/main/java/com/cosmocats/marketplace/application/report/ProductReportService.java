@@ -4,6 +4,7 @@ import com.cosmocats.marketplace.domain.order.OrderStatus;
 import com.cosmocats.marketplace.infrastructure.persistence.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ public class ProductReportService {
     /**
      * Products sorted by the total ordered quantity, the most popular first.
      */
+    @PreAuthorize("hasAnyRole('COMMITTEE', 'ADMIN')")
     public List<PopularProduct> getPopularProducts(int limit) {
         return orderRepository.findPopularProducts(COUNTED_STATUSES, Limit.of(limit)).stream()
                 .map(view -> new PopularProduct(view.getProductId(), view.getProductName(),
