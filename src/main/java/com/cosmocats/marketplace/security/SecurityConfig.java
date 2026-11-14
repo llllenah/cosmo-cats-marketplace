@@ -4,11 +4,13 @@ import com.cosmocats.marketplace.security.apikey.ApiKeyAuthenticationFilter;
 import com.cosmocats.marketplace.security.apikey.ApiKeyAuthenticationProvider;
 import com.cosmocats.marketplace.security.apikey.ApiKeyProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.JwkSetUriJwtDecoderBuilderCustomizer;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.ObjectPostProcessor;
@@ -24,7 +26,9 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -46,6 +50,7 @@ import java.util.Objects;
 public class SecurityConfig {
 
     static final String ROLES_CLAIM = "roles";
+    static final Duration IDENTITY_PROVIDER_TIMEOUT = Duration.ofSeconds(2);
 
     @Bean
     @Order(1)
@@ -88,6 +93,18 @@ public class SecurityConfig {
     @Bean
     OAuth2TokenValidator<Jwt> expiryRequiredValidator() {
         return new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull);
+    }
+
+    // The keys are downloaded while a request waits for its answer. The default RestTemplate has
+    // no timeouts, so a hanging identity provider would hold every request with a token and in the
+    // end all request threads. With the timeouts the caller gets 503 quickly instead.
+    @Bean
+    JwkSetUriJwtDecoderBuilderCustomizer identityProviderTimeouts() {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(IDENTITY_PROVIDER_TIMEOUT);
+        requestFactory.setReadTimeout(IDENTITY_PROVIDER_TIMEOUT);
+        RestTemplate restTemplate = new RestTemplate(requestFactory);
+        return builder -> builder.restOperations(restTemplate);
     }
 
     // The resource server DSL has no setter for the failure handler of its filter,

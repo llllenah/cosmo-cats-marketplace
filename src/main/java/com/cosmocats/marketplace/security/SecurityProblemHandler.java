@@ -58,7 +58,9 @@ public class SecurityProblemHandler
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
                                         AuthenticationException exception) throws IOException {
         if (exception instanceof AuthenticationServiceException) {
-            log.error("Cannot check the access token of {} {}", request.getMethod(), request.getRequestURI(), exception);
+            // One line, no stack trace: while the identity provider is down this happens on every request
+            log.warn("Cannot check the access token of {} {}: {}", request.getMethod(), request.getRequestURI(),
+                    exception.getMessage());
             response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
             write(response, authenticationUnavailable(request.getRequestURI()));
             return;
